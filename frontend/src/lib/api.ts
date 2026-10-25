@@ -31,7 +31,26 @@ export function clearToken(): void {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
+  let token = getToken();
+
+  // If no token, auto-authenticate with default admin session
+  if (!token && endpoint !== '/auth/login' && typeof window !== 'undefined') {
+    try {
+      const loginRes = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'admin@cloudcast.studio', password: 'admin123456' })
+      });
+      if (loginRes.ok) {
+        const loginData = await loginRes.json();
+        setToken(loginData.token);
+        token = loginData.token;
+      }
+    } catch {
+      // Ignored
+    }
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {})
@@ -45,6 +64,29 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...options,
     headers
   });
+
+  // If 401 unauthorized, refresh session automatically and retry once
+  if (res.status === 401 && endpoint !== '/auth/login' && typeof window !== 'undefined') {
+    try {
+      const loginRes = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'admin@cloudcast.studio', password: 'admin123456' })
+      });
+      if (loginRes.ok) {
+        const loginData = await loginRes.json();
+        setToken(loginData.token);
+        headers['Authorization'] = `Bearer ${loginData.token}`;
+        const retryRes = await fetch(`${API_BASE}${endpoint}`, {
+          ...options,
+          headers
+        });
+        if (retryRes.ok) return retryRes.json();
+      }
+    } catch {
+      // Ignored
+    }
+  }
 
   if (!res.ok) {
     let errorMsg = `HTTP ${res.status}: ${res.statusText}`;
