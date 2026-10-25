@@ -27,7 +27,7 @@ import {
   Save,
   Gauge
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, getApiBase } from '@/lib/api';
 import { Stream, StreamTelemetryUpdate } from '@cloudcast/shared';
 
 export default function OBSStudioPage() {
@@ -116,8 +116,8 @@ export default function OBSStudioPage() {
   useEffect(() => {
     if (!selectedStreamId) return;
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-    const es = new EventSource(`${API_BASE}/streams/${selectedStreamId}/live-feed`);
+    const apiBase = getApiBase();
+    const es = new EventSource(`${apiBase}/streams/${selectedStreamId}/live-feed`);
 
     es.onmessage = (event) => {
       try {
@@ -475,10 +475,10 @@ export default function OBSStudioPage() {
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 pulse-onair shadow-[0_0_8px_#ef4444]" />
                 <div className="flex flex-col text-left">
                   <span className="text-xs font-black tracking-wider uppercase text-white drop-shadow-md">
-                    KRYNN VISUALS &amp; STREAM
+                    KRYNN VISUALS
                   </span>
                   <span className="text-[9px] font-mono font-bold text-cyan-300 tracking-widest uppercase">
-                    ULTRA HD LIVE
+                    LIVE STREAM • ULTRA HD
                   </span>
                 </div>
               </div>
@@ -798,17 +798,19 @@ export default function OBSStudioPage() {
               />
             </div>
 
-            {/* Save Output Button */}
-            {outputEditing && (
-              <button
-                onClick={handleSaveDestinationOutput}
-                disabled={actionLoading}
-                className="w-full py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center justify-center gap-1 transition-colors"
-              >
-                <Save className="w-3 h-3" />
-                <span>Save &amp; Apply Output</span>
-              </button>
-            )}
+            {/* Save Output Button (Always accessible) */}
+            <button
+              onClick={handleSaveDestinationOutput}
+              disabled={actionLoading}
+              className={`w-full py-1 rounded font-bold text-[10px] flex items-center justify-center gap-1 transition-all ${
+                outputEditing 
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30' 
+                  : 'bg-[#282a2e] hover:bg-[#313338] text-slate-300'
+              }`}
+            >
+              <Save className="w-3 h-3 text-emerald-400" />
+              <span>{outputEditing ? 'Apply Changes to Output' : 'Save Output Settings'}</span>
+            </button>
 
             {/* Quick Presets */}
             <div className="flex gap-1 pt-0.5">

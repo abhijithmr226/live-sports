@@ -1,14 +1,12 @@
 services:
   - type: web
-    name: cloudcast-backend
+    name: live-sports-obs-studio
     runtime: docker
-    dockerfilePath: backend/Dockerfile
+    dockerfilePath: Dockerfile
     plan: free
     region: oregon
     healthCheckPath: /api/health
     envVars:
-      - key: PORT
-        value: "4000"
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
@@ -21,13 +19,3 @@ services:
         value: "4"
       - key: DATABASE_PATH
         value: ./cloudcast.db
-
-  - type: web
-    name: cloudcast-frontend
-    runtime: docker
-    dockerfilePath: frontend/Dockerfile
-    plan: free
-    region: oregon
-    envVars:
-      - key: NODE_ENV
-        value: production

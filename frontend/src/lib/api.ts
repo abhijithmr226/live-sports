@@ -11,7 +11,18 @@ import {
   User 
 } from '@cloudcast/shared';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+export function getApiBase(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    // In browser (Render, Cloudflare, or localhost), call relative /api so it never fails with connection refused
+    return '/api';
+  }
+  return 'http://localhost:4000/api';
+}
+
+const API_BASE = getApiBase();
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
