@@ -70,9 +70,13 @@ export async function validateUrlForSSRF(urlString: string): Promise<{ allowed: 
     return { allowed: false, reason: 'Invalid URL format' };
   }
 
-  // Strictly enforce http or https protocols
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return { allowed: false, reason: `Unsupported protocol: ${parsed.protocol}. Only http: and https: are allowed.` };
+  // Enforce supported broadcast protocols (HTTP, HTTPS, RTMP, RTMPS, RTSP, SRT, UDP)
+  const allowedProtocols = ['http:', 'https:', 'rtmp:', 'rtmps:', 'rtsp:', 'srt:', 'udp:'];
+  if (!allowedProtocols.includes(parsed.protocol)) {
+    return { 
+      allowed: false, 
+      reason: `Unsupported protocol: ${parsed.protocol}. Allowed media protocols: ${allowedProtocols.join(', ')}` 
+    };
   }
 
   const hostname = parsed.hostname.toLowerCase();

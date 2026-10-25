@@ -39,7 +39,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-64 bg-[#0A101D] border-r border-[#19263D] flex flex-col shrink-0 min-h-screen text-slate-300">
+    <aside className="hidden md:flex w-64 bg-[#0A101D] border-r border-[#19263D] flex-col shrink-0 min-h-screen text-slate-300">
       {/* Brand Header */}
       <div className="h-16 px-5 border-b border-[#19263D] flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">

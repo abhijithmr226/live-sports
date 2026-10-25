@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
+import MobileNav from "@/components/MobileNav";
 
 export const metadata: Metadata = {
   title: "CloudCast Sports Studio | Live Broadcast & HLS Relay Platform",
@@ -17,15 +18,18 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full bg-[#080D1A] text-slate-100 antialiased">
       <body className="min-h-full flex bg-[#080D1A]">
-        <Suspense fallback={<div className="w-64 bg-[#0A101D] border-r border-[#19263D] shrink-0" />}>
+        <Suspense fallback={<div className="hidden md:flex w-64 bg-[#0A101D] border-r border-[#19263D] shrink-0" />}>
           <Sidebar />
         </Suspense>
         <div className="flex-1 flex flex-col min-w-0 min-h-screen bg-[#080D1A]">
           <Header />
-          <main className="flex-1 p-6 overflow-y-auto">
+          <main className="flex-1 p-4 sm:p-6 pb-24 sm:pb-24 md:pb-6 overflow-y-auto">
             {children}
           </main>
         </div>
+        <Suspense fallback={null}>
+          <MobileNav />
+        </Suspense>
       </body>
     </html>
   );

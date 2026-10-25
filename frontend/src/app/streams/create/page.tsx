@@ -16,7 +16,9 @@ import {
   AlertCircle, 
   CheckCircle2, 
   RefreshCw,
-  Info
+  Info,
+  Activity,
+  Volume2
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Destination, SportsEvent, StreamProbeResult, SportCategory } from '@cloudcast/shared';
@@ -56,6 +58,9 @@ export default function CreateStreamWizard() {
   const [videoBitrate, setVideoBitrate] = useState(4500);
   const [fps, setFps] = useState(60);
   const [resolution, setResolution] = useState<'source' | '1080p' | '720p'>('source');
+  const [audioVolumeBoostDb, setAudioVolumeBoostDb] = useState<number>(0);
+  const [audioNormalize, setAudioNormalize] = useState<boolean>(false);
+  const [autoTranscodeCompatibility, setAutoTranscodeCompatibility] = useState<boolean>(true);
 
   // Schedule State
   const [startType, setStartType] = useState<'NOW' | 'SCHEDULED'>('NOW');
@@ -125,7 +130,10 @@ export default function CreateStreamWizard() {
           fps,
           videoCodec: transcodeMode === 'TRANSCODE' ? 'libx264' : 'copy',
           audioCodec: 'aac',
-          audioBitrate: 128
+          audioBitrate: 128,
+          audioVolumeBoostDb,
+          audioNormalize,
+          autoTranscodeCompatibility
         },
         probeResult: probeResult || undefined,
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
@@ -350,7 +358,48 @@ export default function CreateStreamWizard() {
                   <span>{probing ? 'Probing...' : 'Probe Source'}</span>
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+
+              {/* Supported Video Protocol Chips */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-2">
+                <span className="text-[10px] text-slate-400 uppercase font-semibold">Quick Format:</span>
+                <button
+                  type="button"
+                  onClick={() => setSourceUrl('https://stream.ottplus.live/live/ten_1_hd_abr/live/ten_1_hd_720/chunks.m3u8')}
+                  className="px-2 py-0.5 rounded bg-[#121D2F] border border-[#1E2E4A] hover:border-cyan-500/40 text-[10px] text-cyan-400 font-mono transition-colors"
+                >
+                  ⚡ HLS / M3U8
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceUrl('rtsp://')}
+                  className="px-2 py-0.5 rounded bg-[#121D2F] border border-[#1E2E4A] hover:border-cyan-500/40 text-[10px] text-indigo-400 font-mono transition-colors"
+                >
+                  📹 RTSP Cam
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceUrl('rtmp://')}
+                  className="px-2 py-0.5 rounded bg-[#121D2F] border border-[#1E2E4A] hover:border-cyan-500/40 text-[10px] text-emerald-400 font-mono transition-colors"
+                >
+                  🚀 RTMP Ingest
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceUrl('https://')}
+                  className="px-2 py-0.5 rounded bg-[#121D2F] border border-[#1E2E4A] hover:border-cyan-500/40 text-[10px] text-amber-400 font-mono transition-colors"
+                >
+                  📁 MP4 / MKV / TS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceUrl('srt://')}
+                  className="px-2 py-0.5 rounded bg-[#121D2F] border border-[#1E2E4A] hover:border-cyan-500/40 text-[10px] text-pink-400 font-mono transition-colors"
+                >
+                  🌐 SRT Stream
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
                 <Info className="w-3 h-3 text-cyan-400" />
                 Protected by SSRF security guard. Validates codecs, resolution, and audio channels using FFprobe.
               </p>
@@ -569,6 +618,72 @@ export default function CreateStreamWizard() {
                 </div>
               </div>
             )}
+
+            {/* Audio Functions & Enhancements */}
+            <div className="bg-[#121D2F] border border-[#1E2E4A] rounded-xl p-4 space-y-3 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Volume2 className="w-4 h-4 text-cyan-400" />
+                  Audio Processing & Functions
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono">
+                  AAC 44.1 kHz (YouTube Ready)
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Audio Volume Gain Boost (Fix quiet sports feeds)
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { val: 0, label: '0 dB (Original)' },
+                    { val: 3, label: '+3 dB (Mild)' },
+                    { val: 6, label: '+6 dB (Standard)' },
+                    { val: 10, label: '+10 dB (Sports Boost)' }
+                  ].map((boost) => (
+                    <button
+                      key={boost.val}
+                      type="button"
+                      onClick={() => setAudioVolumeBoostDb(boost.val)}
+                      className={`py-2 px-1 rounded-lg text-xs font-semibold border transition-all ${
+                        audioVolumeBoostDb === boost.val
+                          ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400 shadow-sm'
+                          : 'bg-[#0E1726] border-[#1E2E4A] text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {boost.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <div className="text-xs font-medium text-slate-200">Broadcast Loudness Normalization</div>
+                  <div className="text-[10px] text-slate-400">Apply EBU R128 standard (-16 LUFS) to level commentary and ambient stadium sounds</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={audioNormalize}
+                  onChange={(e) => setAudioNormalize(e.target.checked)}
+                  className="w-4 h-4 rounded bg-[#0E1726] border-[#1E2E4A] text-cyan-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-[#1E2E4A]/60">
+                <div>
+                  <div className="text-xs font-medium text-slate-200">Universal Video Compatibility Auto-Transcode</div>
+                  <div className="text-[10px] text-slate-400">Automatically re-encode HEVC / VP9 / AV1 to H.264 so YouTube FLV destination never rejects the feed</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={autoTranscodeCompatibility}
+                  onChange={(e) => setAutoTranscodeCompatibility(e.target.checked)}
+                  className="w-4 h-4 rounded bg-[#0E1726] border-[#1E2E4A] text-cyan-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

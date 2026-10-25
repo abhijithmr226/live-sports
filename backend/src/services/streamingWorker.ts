@@ -184,46 +184,87 @@ class StreamingEngine extends EventEmitter {
     initialReconnectAttempts: number = 0
   ) {
     const profile = stream.outputProfile || { mode: 'COPY' };
-    const isTranscode = profile.mode === 'TRANSCODE';
+    const rawUrl = stream.sourceUrl.trim();
+    const lowerUrl = rawUrl.toLowerCase();
 
-    // Safe FFmpeg arguments with heavy-duty network resiliency:
-    // -reconnect 1: reconnect on failure
-    // -reconnect_at_eof 1: reconnect if source hits premature EOF/segment gap
-    // -reconnect_streamed 1: reconnect streamed playlists
-    // -reconnect_delay_max 5: maximum reconnect backoff delay in seconds for HTTP/HLS
-    // -rw_timeout 15000000: 15-second socket timeout (prevents silent frozen TCP stalls)
-    // -fflags +genpts+discardcorrupt: regenerate timestamps and gracefully ignore corrupt packets
-    const args: string[] = [
-      '-reconnect', '1',
-      '-reconnect_at_eof', '1',
-      '-reconnect_streamed', '1',
-      '-reconnect_delay_max', '5',
-      '-rw_timeout', '15000000',
+    // Protocol & Source format detection
+    const isRtsp = lowerUrl.startsWith('rtsp://');
+    const isRtmp = lowerUrl.startsWith('rtmp://') || lowerUrl.startsWith('rtmps://');
+    const isSrt = lowerUrl.startsWith('srt://');
+    const isFile = lowerUrl.endsWith('.mp4') || lowerUrl.endsWith('.mkv') || lowerUrl.endsWith('.mov') || lowerUrl.endsWith('.ts') || lowerUrl.endsWith('.webm') || lowerUrl.endsWith('.flv');
+
+    const args: string[] = [];
+
+    // Protocol-specific resiliency inputs
+    if (isRtsp) {
+      // Force TCP for RTSP to prevent packet drop and frame corruption over UDP
+      args.push('-rtsp_transport', 'tcp', '-rw_timeout', '15000000');
+    } else if (isRtmp) {
+      args.push('-analyzeduration', '3000000', '-probesize', '3000000', '-rw_timeout', '15000000');
+    } else if (isSrt) {
+      args.push('-rw_timeout', '15000000');
+    } else if (isFile) {
+      // Read at native framerate for VOD file live streaming so it relays in real-time
+      args.push('-re');
+    } else {
+      // HTTP / HTTPS / HLS streaming
+      args.push(
+        '-reconnect', '1',
+        '-reconnect_at_eof', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5',
+        '-rw_timeout', '15000000'
+      );
+    }
+
+    // Packet corruption recovery
+    args.push(
       '-err_detect', 'ignore_err',
       '-fflags', '+genpts+discardcorrupt',
       '-i', stream.sourceUrl
-    ];
+    );
 
-    if (isTranscode) {
+    // YouTube Live compatibility: Standard FLV RTMP requires H.264 video.
+    // If input video codec is HEVC, VP9, AV1, or MPEG2, auto-transcode video so YouTube accepts it cleanly.
+    const isNonH264 = Boolean(
+      stream.probeResult?.videoCodec && 
+      !['h264', 'avc1'].includes(stream.probeResult.videoCodec.toLowerCase())
+    );
+    const shouldTranscodeVideo = profile.mode === 'TRANSCODE' || (profile.autoTranscodeCompatibility !== false && isNonH264);
+
+    if (shouldTranscodeVideo) {
       args.push(
-        '-c:v', profile.videoCodec === 'libx264' ? 'libx264' : 'libx264',
+        '-c:v', 'libx264',
         '-preset', profile.preset || 'veryfast',
         '-b:v', `${profile.videoBitrate || 4500}k`,
         '-maxrate', `${profile.videoBitrate || 4500}k`,
         '-bufsize', `${(profile.videoBitrate || 4500) * 2}k`,
         '-pix_fmt', 'yuv420p',
-        '-g', `${(profile.fps || 60) * (profile.keyframeIntervalSeconds || 2)}`,
-        '-c:a', 'aac',
-        '-b:a', `${profile.audioBitrate || 128}k`,
-        '-ar', '44100'
+        '-g', `${(profile.fps || 60) * (profile.keyframeIntervalSeconds || 2)}`
       );
 
       if (profile.fps) {
         args.push('-r', `${profile.fps}`);
       }
     } else {
-      // Copy compatible streams directly without re-encoding CPU overhead
-      args.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k');
+      // Direct stream copy for native H.264 feeds (ultra-low CPU load)
+      args.push('-c:v', 'copy');
+    }
+
+    // Audio functions: Always encode audio to clean AAC 44.1kHz (compatible with YouTube, web, & mobile)
+    args.push('-c:a', 'aac', '-b:a', `${profile.audioBitrate || 128}k`, '-ar', '44100');
+
+    // Audio Boost & Normalization filters
+    const audioFilters: string[] = [];
+    if (profile.audioVolumeBoostDb && profile.audioVolumeBoostDb > 0) {
+      audioFilters.push(`volume=${profile.audioVolumeBoostDb}dB`);
+    }
+    if (profile.audioNormalize) {
+      audioFilters.push('loudnorm=I=-16:TP=-1.5:LRA=11');
+    }
+
+    if (audioFilters.length > 0) {
+      args.push('-af', audioFilters.join(','));
     }
 
     // Output container format for RTMP / YouTube Live with resilient flags
@@ -238,7 +279,7 @@ class StreamingEngine extends EventEmitter {
       jobId: job.id,
       severity: 'INFO',
       eventType: 'JOB_STARTED',
-      message: `Starting FFmpeg relay (Mode: ${profile.mode}, Video: ${isTranscode ? 'Transcode' : 'Stream-Copy'}, Destination: RTMP FLV, Resiliency: Infinite Auto-Reconnect & Watchdog)`
+      message: `Starting FFmpeg relay (Mode: ${profile.mode}, Video: ${shouldTranscodeVideo ? 'Transcode' : 'Stream-Copy'}, Destination: RTMP FLV, Resiliency: Infinite Auto-Reconnect & Watchdog)`
     });
 
     // Spawn FFmpeg directly without a shell

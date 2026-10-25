@@ -26,35 +26,42 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="h-16 bg-[#0A101D] border-b border-[#19263D] px-6 flex items-center justify-between z-10 shrink-0">
-      {/* Left: Studio Status Badges */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0E1726] border border-[#19263D]">
-          <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">Studio Status:</span>
+    <header className="h-16 bg-[#0A101D] border-b border-[#19263D] px-3 sm:px-6 flex items-center justify-between z-10 shrink-0">
+      {/* Left: Mobile Brand & Studio Status Badges */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Mobile Brand Mark (shown when sidebar hidden) */}
+        <Link href="/" className="md:hidden flex items-center gap-2 mr-1">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
+            <Radio className="w-4 h-4 animate-pulse" />
+          </div>
+        </Link>
+
+        <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#0E1726] border border-[#19263D]">
+          <span className="hidden sm:inline text-[11px] font-semibold tracking-wider text-slate-400 uppercase">Status:</span>
           {liveCount > 0 ? (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-bold font-mono">
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-500/15 border border-red-500/30 text-red-400 text-[11px] sm:text-xs font-bold font-mono">
               <span className="w-2 h-2 rounded-full bg-red-500 pulse-onair"></span>
-              {liveCount} STREAM{liveCount > 1 ? 'S' : ''} ON AIR
+              {liveCount} LIVE
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] sm:text-xs font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              STANDBY / READY
+              READY
             </div>
           )}
         </div>
 
         <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0E1726] border border-[#19263D] text-xs text-slate-400">
           <Server className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Worker Engine:</span>
+          <span>Worker:</span>
           <span className={`font-semibold ${workerOnline ? 'text-cyan-400' : 'text-rose-400'}`}>
-            {workerOnline ? 'FFmpeg Connected' : 'Worker Offline'}
+            {workerOnline ? 'Connected' : 'Offline'}
           </span>
         </div>
       </div>
 
       {/* Right: Actions and User Profile */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <button 
           onClick={fetchStatus} 
           title="Refresh Studio State"
@@ -66,22 +73,22 @@ export default function Header() {
 
         <Link
           href="/streams/create"
-          className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-semibold shadow-md shadow-cyan-500/20 transition-all cursor-pointer"
+          className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-semibold shadow-md shadow-cyan-500/20 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>New Stream Relay</span>
+          <span className="hidden xs:inline">New Stream</span>
         </Link>
 
-        <div className="h-6 w-[1px] bg-[#19263D] mx-1"></div>
+        <div className="hidden sm:block h-6 w-[1px] bg-[#19263D] mx-0.5"></div>
 
         <Link
           href="/account"
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#0E1726] border border-[#19263D] hover:border-cyan-500/40 text-xs text-slate-300 transition-colors"
+          className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-[#0E1726] border border-[#19263D] hover:border-cyan-500/40 text-xs text-slate-300 transition-colors"
         >
           <div className="w-6 h-6 rounded-md bg-indigo-600/30 text-indigo-400 flex items-center justify-center font-bold text-xs">
             OP
           </div>
-          <span className="hidden sm:inline font-medium">Studio Director</span>
+          <span className="hidden sm:inline font-medium">Director</span>
         </Link>
       </div>
     </header>

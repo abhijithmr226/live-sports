@@ -45,6 +45,9 @@ export interface OutputProfile {
   audioCodec?: 'copy' | 'aac';
   keyframeIntervalSeconds?: number;
   preset?: 'veryfast' | 'faster' | 'fast' | 'medium';
+  audioVolumeBoostDb?: number; // Audio volume gain in dB (+0 to +20dB)
+  audioNormalize?: boolean; // Loudness normalization (EBU R128)
+  autoTranscodeCompatibility?: boolean; // Auto-transcode non-H264 video for YouTube FLV
 }
 
 export interface StreamSourceConfig {

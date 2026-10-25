@@ -36,6 +36,9 @@ export const OutputProfileSchema = z.object({
   audioCodec: z.enum(['copy', 'aac']).default('copy'),
   keyframeIntervalSeconds: z.number().min(1).max(10).default(2),
   preset: z.enum(['veryfast', 'faster', 'fast', 'medium']).default('veryfast'),
+  audioVolumeBoostDb: z.number().min(0).max(20).default(0).optional(),
+  audioNormalize: z.boolean().default(false).optional(),
+  autoTranscodeCompatibility: z.boolean().default(true).optional(),
 });
 
 // Stream creation & edit validation
@@ -44,7 +47,10 @@ export const CreateStreamSchema = z.object({
   description: z.string().max(1000).optional(),
   sport: SportCategoryEnum.default('FOOTBALL'),
   eventId: z.string().optional().nullable(),
-  sourceUrl: z.string().url('Must be a valid URL (HTTP or HTTPS)'),
+  sourceUrl: z.string().min(5, 'Stream source URL must be at least 5 characters').refine(
+    (val) => /^(https?|rtmp|rtmps|rtsp|srt|udp):\/\/.+/i.test(val.trim()),
+    { message: 'Must be a valid stream URL (HTTP/HTTPS, RTMP, RTSP, SRT, or UDP)' }
+  ),
   sourceNotes: z.string().max(500).optional(),
   destinationId: z.string().min(1, 'Destination is required'),
   outputProfile: OutputProfileSchema.default({}),

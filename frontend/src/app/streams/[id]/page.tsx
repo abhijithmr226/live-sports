@@ -552,6 +552,67 @@ function StreamControlContent({ params }: { params: Promise<{ id: string }> }) {
           </div>
         </div>
       </div>
+
+      {/* =========================================================================
+          STICKY MOBILE BROADCAST DOCK (Always accessible thumb-zone controls)
+          ========================================================================= */}
+      <div className="fixed bottom-16 left-0 right-0 z-40 p-2.5 bg-[#09101F]/95 backdrop-blur-md border-t border-[#1C2C47] md:hidden shadow-2xl flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 pl-1">
+          <span className={`w-3 h-3 rounded-full shrink-0 ${
+            stream?.status === 'LIVE' 
+              ? 'bg-red-500 pulse-onair' 
+              : stream?.status === 'RECONNECTING'
+              ? 'bg-amber-500 animate-pulse'
+              : 'bg-slate-600'
+          }`} />
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5 truncate">
+              <span>{stream?.status || 'IDLE'}</span>
+              {telemetry?.fps ? (
+                <span className="text-[10px] text-cyan-400 font-mono">
+                  {telemetry.fps} FPS
+                </span>
+              ) : null}
+            </div>
+            <div className="text-[10px] text-slate-400 font-mono truncate">
+              {telemetry?.uptimeSeconds ? `${Math.floor(telemetry.uptimeSeconds / 60)}m uptime` : 'Ready to air'}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isLive ? (
+            <>
+              <button
+                onClick={handleRestart}
+                disabled={actionLoading}
+                className="p-3 rounded-xl bg-[#142033] border border-[#1E2E4A] text-slate-300 active:scale-95 transition-transform"
+                title="Restart Relay"
+                aria-label="Restart Relay"
+              >
+                <RotateCcw className="w-4 h-4 text-cyan-400" />
+              </button>
+              <button
+                onClick={handleStop}
+                disabled={actionLoading}
+                className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-600 hover:bg-red-500 active:scale-95 text-white font-extrabold text-xs shadow-lg shadow-red-600/30 transition-all min-h-[48px]"
+              >
+                <Square className="w-4 h-4 fill-white" />
+                <span>STOP</span>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleStart}
+              disabled={actionLoading}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-95 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/30 transition-all min-h-[48px]"
+            >
+              <Play className="w-4 h-4 fill-white" />
+              <span>GO LIVE</span>
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
