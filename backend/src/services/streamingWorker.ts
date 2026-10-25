@@ -33,6 +33,7 @@ export interface RunningProcessInfo {
   lastDropFrames: number;
   uptimeSeconds: number;
   lastProgressAt: number;
+  lastFpsLogged?: number;
 }
 
 class StreamingEngine extends EventEmitter {
@@ -232,6 +233,7 @@ class StreamingEngine extends EventEmitter {
     const isRtmp = lowerUrl.startsWith('rtmp://') || lowerUrl.startsWith('rtmps://');
     const isSrt = lowerUrl.startsWith('srt://');
     const isFile = lowerUrl.endsWith('.mp4') || lowerUrl.endsWith('.mkv') || lowerUrl.endsWith('.mov') || lowerUrl.endsWith('.ts') || lowerUrl.endsWith('.webm') || lowerUrl.endsWith('.flv');
+    const isHls = lowerUrl.includes('.m3u8') || lowerUrl.includes('/hls');
 
     const args: string[] = [];
 
@@ -240,21 +242,22 @@ class StreamingEngine extends EventEmitter {
       // Force TCP for RTSP to prevent packet drop and frame corruption over UDP
       args.push('-rtsp_transport', 'tcp', '-rw_timeout', '15000000');
     } else if (isRtmp) {
-      args.push('-analyzeduration', '3000000', '-probesize', '3000000', '-rw_timeout', '15000000');
+      args.push('-rw_timeout', '15000000');
     } else if (isSrt) {
       args.push('-rw_timeout', '15000000');
     } else if (isFile) {
       // Read at native framerate for VOD file live streaming so it relays in real-time
       args.push('-re');
+    } else if (isHls) {
+      // HLS live stream: rw_timeout protects against dropped TCP connections
+      args.push('-rw_timeout', '15000000');
     } else {
-      // HTTP / HTTPS / HLS streaming with ultra-aggressive low-latency and immediate reconnect
+      // Progressive HTTP / HTTPS live stream with low-delay reconnect
       args.push(
         '-reconnect', '1',
-        '-reconnect_at_eof', '1',
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '2',
-        '-rw_timeout', '10000000',
-        '-multiple_requests', '1'
+        '-rw_timeout', '15000000'
       );
     }
 
@@ -263,15 +266,7 @@ class StreamingEngine extends EventEmitter {
       '-err_detect', 'ignore_err',
       '-fflags', '+nobuffer+genpts+discardcorrupt',
       '-flags', 'low_delay',
-      '-analyzeduration', '3000000',
-      '-probesize', '3000000',
       '-i', stream.sourceUrl
-    );
-
-    // Explicit stream mapping: take primary video and audio only, discarding SCTE-35 metadata
-    args.push(
-      '-map', '0:v:0?',
-      '-map', '0:a:0?'
     );
 
     // YouTube Live compatibility: Standard FLV RTMP requires H.264 video.
@@ -470,6 +465,10 @@ class StreamingEngine extends EventEmitter {
             currentDropFrames: drops,
             currentUptimeSeconds: uptime
           });
+          if (uptime > 0 && procInfo.lastFpsLogged !== uptime) {
+            procInfo.lastFpsLogged = uptime;
+            console.log(`[Live Stream ${stream.id}] Active | Uptime: ${uptime}s | FPS: ${fps} | Bitrate: ${bitrateKbps} kbps | Speed: ${speedMatch ? speedMatch[1] : '1.0x'}`);
+          }
         }
       }
     });

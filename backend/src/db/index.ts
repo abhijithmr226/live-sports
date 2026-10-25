@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { CONFIG } from '../config';
+import { decryptSecret, maskSecret } from '../security/encryption';
 import { 
   User, 
   Stream, 
@@ -286,6 +287,16 @@ export function updateUserPassword(id: string, newHash: string): void {
 
 // ----------------- DESTINATION REPOSITORY -----------------
 
+function maskEncryptedKey(encryptedKey?: string): string {
+  if (!encryptedKey) return '••••••••••••key';
+  try {
+    const plain = decryptSecret(encryptedKey);
+    return maskSecret(plain) || '••••••••••••key';
+  } catch {
+    return '••••••••••••key';
+  }
+}
+
 export function listDestinations(ownerId: string): Destination[] {
   const rows = db.prepare('SELECT * FROM destinations WHERE ownerId = ? ORDER BY createdAt DESC').all(ownerId) as any[];
   return rows.map(r => ({
@@ -294,7 +305,7 @@ export function listDestinations(ownerId: string): Destination[] {
     name: r.name,
     type: r.type,
     ingestUrl: r.ingestUrl,
-    maskedStreamKey: '••••••••••••' + (r.encryptedStreamKey ? r.encryptedStreamKey.slice(-4) : 'key'),
+    maskedStreamKey: maskEncryptedKey(r.encryptedStreamKey),
     isDefault: Boolean(r.isDefault),
     createdAt: r.createdAt,
     updatedAt: r.updatedAt
@@ -317,7 +328,7 @@ export function getDestinationRaw(id: string, ownerId?: string): (Destination & 
     type: r.type,
     ingestUrl: r.ingestUrl,
     encryptedStreamKey: r.encryptedStreamKey,
-    maskedStreamKey: '••••••••••••' + (r.encryptedStreamKey ? r.encryptedStreamKey.slice(-4) : 'key'),
+    maskedStreamKey: maskEncryptedKey(r.encryptedStreamKey),
     isDefault: Boolean(r.isDefault),
     createdAt: r.createdAt,
     updatedAt: r.updatedAt
@@ -341,7 +352,7 @@ export function createDestination(data: { ownerId: string; name: string; type: s
     name: data.name,
     type: data.type as any,
     ingestUrl: data.ingestUrl,
-    maskedStreamKey: '••••••••••••' + data.encryptedStreamKey.slice(-4),
+    maskedStreamKey: maskEncryptedKey(data.encryptedStreamKey),
     isDefault: data.isDefault,
     createdAt: now,
     updatedAt: now
@@ -455,9 +466,18 @@ export function getStreamById(id: string, ownerId?: string): Stream | null {
 
   // Attach destination if exists
   if (s.destinationId) {
-    const d = db.prepare('SELECT id, ownerId, name, type, ingestUrl, createdAt, updatedAt FROM destinations WHERE id = ?').get(s.destinationId) as any;
+    const d = db.prepare('SELECT id, ownerId, name, type, ingestUrl, encryptedStreamKey, createdAt, updatedAt FROM destinations WHERE id = ?').get(s.destinationId) as any;
     if (d) {
-      s.destination = { ...d, maskedStreamKey: '••••••••••••' };
+      s.destination = {
+        id: d.id,
+        ownerId: d.ownerId,
+        name: d.name,
+        type: d.type,
+        ingestUrl: d.ingestUrl,
+        maskedStreamKey: maskEncryptedKey(d.encryptedStreamKey),
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt
+      };
     }
   }
 
