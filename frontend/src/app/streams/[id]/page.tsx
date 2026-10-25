@@ -126,7 +126,7 @@ function StreamControlContent({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
-  const isLive = stream?.status === 'LIVE' || stream?.status === 'STARTING';
+  const isLive = stream?.status === 'LIVE' || stream?.status === 'STARTING' || stream?.status === 'RECONNECTING';
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -143,8 +143,12 @@ function StreamControlContent({ params }: { params: Promise<{ id: string }> }) {
             <div className="flex items-center gap-2.5">
               <h1 className="text-xl font-bold text-white tracking-wide">{stream?.name || 'Loading Stream...'}</h1>
               <span className={`text-[11px] px-2.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider ${
-                isLive 
+                stream?.status === 'LIVE' 
                   ? 'bg-red-500 text-white pulse-onair' 
+                  : stream?.status === 'RECONNECTING'
+                  ? 'bg-amber-500 text-black font-extrabold animate-pulse'
+                  : stream?.status === 'STARTING'
+                  ? 'bg-blue-500 text-white animate-pulse'
                   : stream?.status === 'READY'
                   ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                   : 'bg-slate-700 text-slate-300'

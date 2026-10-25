@@ -23,16 +23,20 @@ export interface RunningProcessInfo {
   child: ChildProcess;
   startedAt: number;
   scheduledStopTimer?: NodeJS.Timeout;
+  watchdogTimer?: NodeJS.Timeout;
+  stableTimer?: NodeJS.Timeout;
   reconnectAttempts: number;
   isIntentionalStop: boolean;
   lastFps: number;
   lastBitrateKbps: number;
   lastDropFrames: number;
   uptimeSeconds: number;
+  lastProgressAt: number;
 }
 
 class StreamingEngine extends EventEmitter {
   private activeProcesses = new Map<string, RunningProcessInfo>(); // key: streamId
+  private reconnectTimers = new Map<string, NodeJS.Timeout>(); // key: streamId
   private startTime = Date.now();
 
   constructor() {
@@ -97,6 +101,13 @@ class StreamingEngine extends EventEmitter {
    * Starts a stream relay job using safe argument arrays and real FFmpeg.
    */
   public async startStream(streamId: string, userId: string, scheduledStopAt?: string | null, scheduleId?: string | null): Promise<StreamingJob> {
+    // Clear any existing reconnect timer
+    const existingRetry = this.reconnectTimers.get(streamId);
+    if (existingRetry) {
+      clearTimeout(existingRetry);
+      this.reconnectTimers.delete(streamId);
+    }
+
     // Check if already active
     if (this.activeProcesses.has(streamId)) {
       throw new Error(`Stream [${streamId}] is already running an active broadcast job`);
@@ -161,21 +172,35 @@ class StreamingEngine extends EventEmitter {
       }
     });
 
-    this.spawnFfmpegProcess(stream, job, targetRtmpUrl, scheduledStopAt);
+    this.spawnFfmpegProcess(stream, job, targetRtmpUrl, scheduledStopAt, 0);
     return job;
   }
 
-  private spawnFfmpegProcess(stream: Stream, job: StreamingJob, targetRtmpUrl: string, scheduledStopAt?: string | null) {
+  private spawnFfmpegProcess(
+    stream: Stream, 
+    job: StreamingJob, 
+    targetRtmpUrl: string, 
+    scheduledStopAt?: string | null,
+    initialReconnectAttempts: number = 0
+  ) {
     const profile = stream.outputProfile || { mode: 'COPY' };
     const isTranscode = profile.mode === 'TRANSCODE';
 
-    // Build FFmpeg arguments safely as array (ZERO shell injection)
+    // Safe FFmpeg arguments with heavy-duty network resiliency:
+    // -reconnect 1: reconnect on failure
+    // -reconnect_at_eof 1: reconnect if source hits premature EOF/segment gap
+    // -reconnect_streamed 1: reconnect streamed playlists
+    // -reconnect_delay_max 5: maximum reconnect backoff delay in seconds for HTTP/HLS
+    // -rw_timeout 15000000: 15-second socket timeout (prevents silent frozen TCP stalls)
+    // -fflags +genpts+discardcorrupt: regenerate timestamps and gracefully ignore corrupt packets
     const args: string[] = [
       '-reconnect', '1',
       '-reconnect_at_eof', '1',
       '-reconnect_streamed', '1',
-      '-reconnect_delay_max', '10',
+      '-reconnect_delay_max', '5',
+      '-rw_timeout', '15000000',
       '-err_detect', 'ignore_err',
+      '-fflags', '+genpts+discardcorrupt',
       '-i', stream.sourceUrl
     ];
 
@@ -201,15 +226,19 @@ class StreamingEngine extends EventEmitter {
       args.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k');
     }
 
-    // Output container format for RTMP / YouTube Live
-    args.push('-f', 'flv', targetRtmpUrl);
+    // Output container format for RTMP / YouTube Live with resilient flags
+    args.push(
+      '-flvflags', 'no_duration_filesize',
+      '-f', 'flv', 
+      targetRtmpUrl
+    );
 
     addStreamLog({
       streamId: stream.id,
       jobId: job.id,
       severity: 'INFO',
       eventType: 'JOB_STARTED',
-      message: `Starting FFmpeg relay (Mode: ${profile.mode}, Video: ${isTranscode ? 'Transcode' : 'Stream-Copy'}, Destination: RTMP FLV)`
+      message: `Starting FFmpeg relay (Mode: ${profile.mode}, Video: ${isTranscode ? 'Transcode' : 'Stream-Copy'}, Destination: RTMP FLV, Resiliency: Infinite Auto-Reconnect & Watchdog)`
     });
 
     // Spawn FFmpeg directly without a shell
@@ -223,13 +252,41 @@ class StreamingEngine extends EventEmitter {
       streamId: stream.id,
       child,
       startedAt: Date.now(),
-      reconnectAttempts: 0,
+      reconnectAttempts: initialReconnectAttempts,
       isIntentionalStop: false,
       lastFps: 0,
       lastBitrateKbps: 0,
       lastDropFrames: 0,
-      uptimeSeconds: 0
+      uptimeSeconds: 0,
+      lastProgressAt: Date.now()
     };
+
+    // If stream runs stably for 30 seconds without termination, reset the reconnect backoff counter
+    procInfo.stableTimer = setTimeout(() => {
+      if (this.activeProcesses.get(stream.id) === procInfo && !procInfo.isIntentionalStop) {
+        procInfo.reconnectAttempts = 0;
+      }
+    }, 30000);
+
+    // Watchdog check every 10 seconds: If FFmpeg stalls with no stderr data for 30 seconds, force restart
+    procInfo.watchdogTimer = setInterval(() => {
+      if (procInfo.isIntentionalStop) return;
+      const idleSec = Math.round((Date.now() - procInfo.lastProgressAt) / 1000);
+      if (idleSec >= 30) {
+        addStreamLog({
+          streamId: stream.id,
+          jobId: job.id,
+          severity: 'WARN',
+          eventType: 'RECONNECT_ATTEMPT',
+          message: `Watchdog alert: Stream pipeline stalled (no packets for ${idleSec}s). Force-restarting relay...`
+        });
+        try {
+          procInfo.child.kill('SIGKILL');
+        } catch {
+          procInfo.child.kill();
+        }
+      }
+    }, 10000);
 
     // If scheduled stop time was provided, setup stop timer
     if (scheduledStopAt) {
@@ -261,6 +318,7 @@ class StreamingEngine extends EventEmitter {
     // Stderr contains FFmpeg progress updates
     child.stderr.on('data', (data: Buffer) => {
       const text = data.toString();
+      procInfo.lastProgressAt = Date.now();
 
       if (!connectedReported && (text.includes('Stream #') || text.includes('Output #0') || text.includes('frame='))) {
         connectedReported = true;
@@ -330,9 +388,10 @@ class StreamingEngine extends EventEmitter {
     });
 
     child.on('close', (code, signal) => {
-      if (procInfo.scheduledStopTimer) {
-        clearTimeout(procInfo.scheduledStopTimer);
-      }
+      if (procInfo.scheduledStopTimer) clearTimeout(procInfo.scheduledStopTimer);
+      if (procInfo.watchdogTimer) clearInterval(procInfo.watchdogTimer);
+      if (procInfo.stableTimer) clearTimeout(procInfo.stableTimer);
+
       this.activeProcesses.delete(stream.id);
 
       const totalUptime = Math.round((Date.now() - procInfo.startedAt) / 1000);
@@ -353,49 +412,35 @@ class StreamingEngine extends EventEmitter {
           message: `Broadcast ended normally by user request. Total runtime: ${totalUptime}s`
         });
       } else {
-        // Unexpected termination: Handle retry / reconnection
-        if (procInfo.reconnectAttempts < 5) {
-          procInfo.reconnectAttempts++;
-          const backoffDelay = Math.min(30000, 2000 * Math.pow(1.8, procInfo.reconnectAttempts));
+        // UNINTENDED INTERRUPTION (source hiccup, ISP blip, or remote drop)
+        // INFINITE AUTO-RECONNECT: NEVER give up, keep trying until the user explicitly says STOP!
+        const nextAttempts = procInfo.reconnectAttempts + 1;
+        // Fast backoff capped at 8 seconds so recovery is near-instant
+        const backoffDelay = Math.min(8000, 2000 + Math.min(nextAttempts * 1000, 6000));
 
-          updateStreamingJob(job.id, {
-            state: 'RECONNECTING',
-            reconnectCount: procInfo.reconnectAttempts
-          });
-          updateStreamStatus(stream.id, 'RECONNECTING', job.id);
+        updateStreamingJob(job.id, {
+          state: 'RECONNECTING',
+          reconnectCount: nextAttempts
+        });
+        updateStreamStatus(stream.id, 'RECONNECTING', job.id);
 
-          addStreamLog({
-            streamId: stream.id,
-            jobId: job.id,
-            severity: 'WARN',
-            eventType: 'RECONNECT_ATTEMPT',
-            message: `FFmpeg exited unexpectedly (code ${code}, signal ${signal}). Initiating auto-reconnect attempt #${procInfo.reconnectAttempts} in ${Math.round(backoffDelay / 1000)}s...`
-          });
+        addStreamLog({
+          streamId: stream.id,
+          jobId: job.id,
+          severity: 'WARN',
+          eventType: 'RECONNECT_ATTEMPT',
+          message: `FFmpeg relay interrupted (code ${code}, signal ${signal}). Watchdog auto-reconnect attempt #${nextAttempts} in ${Math.round(backoffDelay / 1000)}s... (Stream will keep running indefinitely until manually stopped by user)`
+        });
 
-          setTimeout(() => {
-            const currentStream = getStreamById(stream.id);
-            if (currentStream && currentStream.status === 'RECONNECTING') {
-              this.spawnFfmpegProcess(currentStream, job, targetRtmpUrl, scheduledStopAt);
-            }
-          }, backoffDelay);
-        } else {
-          // Exceeded max reconnects
-          updateStreamingJob(job.id, {
-            state: 'FAILED',
-            stoppedAt: new Date().toISOString(),
-            exitCode: code,
-            errorSummary: `FFmpeg process terminated unexpectedly with code ${code}. Reconnect attempts exhausted.`
-          });
-          updateStreamStatus(stream.id, 'FAILED', null);
+        const retryTimer = setTimeout(() => {
+          this.reconnectTimers.delete(stream.id);
+          const currentStream = getStreamById(stream.id);
+          if (currentStream && currentStream.status === 'RECONNECTING') {
+            this.spawnFfmpegProcess(currentStream, job, targetRtmpUrl, scheduledStopAt, nextAttempts);
+          }
+        }, backoffDelay);
 
-          addStreamLog({
-            streamId: stream.id,
-            jobId: job.id,
-            severity: 'ERROR',
-            eventType: 'JOB_FAILED',
-            message: `Maximum auto-reconnection attempts reached. Stream stopped.`
-          });
-        }
+        this.reconnectTimers.set(stream.id, retryTimer);
       }
     });
   }
@@ -404,6 +449,13 @@ class StreamingEngine extends EventEmitter {
    * Stop an active stream gracefully.
    */
   public async stopStream(streamId: string, userId: string): Promise<void> {
+    // 1. Clear any pending retry timer if currently reconnecting
+    const retryTimer = this.reconnectTimers.get(streamId);
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      this.reconnectTimers.delete(streamId);
+    }
+
     const procInfo = this.activeProcesses.get(streamId);
     if (!procInfo) {
       // Force status update in DB if out of sync
@@ -412,9 +464,9 @@ class StreamingEngine extends EventEmitter {
     }
 
     procInfo.isIntentionalStop = true;
-    if (procInfo.scheduledStopTimer) {
-      clearTimeout(procInfo.scheduledStopTimer);
-    }
+    if (procInfo.scheduledStopTimer) clearTimeout(procInfo.scheduledStopTimer);
+    if (procInfo.watchdogTimer) clearInterval(procInfo.watchdogTimer);
+    if (procInfo.stableTimer) clearTimeout(procInfo.stableTimer);
 
     addAuditLog({
       userId,
@@ -429,7 +481,7 @@ class StreamingEngine extends EventEmitter {
       jobId: procInfo.jobId,
       severity: 'INFO',
       eventType: 'JOB_STOPPED',
-      message: `Stop signal issued by user [${userId}]. Terminating FFmpeg process...`
+      message: `Stop signal issued by user [${userId}]. Terminating FFmpeg process cleanly...`
     });
 
     updateStreamStatus(streamId, 'STOPPING');
@@ -441,7 +493,7 @@ class StreamingEngine extends EventEmitter {
       procInfo.child.kill();
     }
 
-    // Force kill if it hasn't exited within 4 seconds
+    // Force kill if it hasn't exited within 3 seconds
     setTimeout(() => {
       try {
         if (!procInfo.child.killed) {
@@ -450,7 +502,7 @@ class StreamingEngine extends EventEmitter {
       } catch {
         // Ignored
       }
-    }, 4000);
+    }, 3000);
   }
 
   /**
