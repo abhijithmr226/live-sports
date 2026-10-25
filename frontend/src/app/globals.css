@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --background: #080D1A;
+  --foreground: #F1F5F9;
+  --surface-1: #0E1726;
+  --surface-2: #131F33;
+  --surface-3: #182842;
+  --border: #1E2D45;
+  --border-subtle: #162235;
+  --primary: #0EA5E9;
+  --primary-glow: rgba(14, 165, 233, 0.25);
+  --live-green: #10B981;
+  --live-glow: rgba(16, 185, 129, 0.35);
+  --warning-amber: #F59E0B;
+  --danger-red: #EF4444;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Control room pulse animation for ON-AIR indicators */
+@keyframes onAirPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes liveGreenPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.pulse-onair {
+  animation: onAirPulse 2s infinite;
+}
+
+.pulse-live {
+  animation: liveGreenPulse 2s infinite;
+}
+
+/* Dark studio custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0B111E;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E2D45;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2E4366;
+}
+
+/* Terminal & telemetry monospace styling */
+.font-mono-telemetry {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-feature-settings: "tnum" 1;
+}
