@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
-import Header from "@/components/Header";
-import MobileNav from "@/components/MobileNav";
+import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "CloudCast Sports Studio | Live Broadcast & HLS Relay Platform",
-  description: "Professional sports live-streaming management platform. Relay HLS/M3U8 feeds to YouTube Live and RTMP destinations with cloud worker persistence.",
+  title: "OBS Studio Web | Live Sports Broadcast & Relay Engine",
+  description: "Authentic, high-density OBS Studio web interface for live sports relays, YouTube Live broadcasts, and multi-format streaming.",
 };
 
 export default function RootLayout({
@@ -16,19 +14,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full bg-[#080D1A] text-slate-100 antialiased">
-      <body className="min-h-full flex bg-[#080D1A]">
-        <Suspense fallback={<div className="hidden md:flex w-64 bg-[#0A101D] border-r border-[#19263D] shrink-0" />}>
-          <Sidebar />
-        </Suspense>
-        <div className="flex-1 flex flex-col min-w-0 min-h-screen bg-[#080D1A]">
-          <Header />
-          <main className="flex-1 p-4 sm:p-6 pb-24 sm:pb-24 md:pb-6 overflow-y-auto">
+    <html lang="en" className="h-full bg-[#111318] text-slate-100 antialiased">
+      <body className="min-h-full flex bg-[#111318]">
+        <Suspense fallback={<div className="min-h-screen w-full bg-[#111318]" />}>
+          <AppShell>
             {children}
-          </main>
-        </div>
-        <Suspense fallback={null}>
-          <MobileNav />
+          </AppShell>
         </Suspense>
       </body>
     </html>

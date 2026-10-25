@@ -120,7 +120,10 @@ async function startServer() {
   // 2. Start durable scheduler
   durableScheduler.start();
 
-  // 3. Listen on configured port
+  // 3. Start autonomous dead-man revival watchdog
+  streamingEngine.startAutonomousRevivalWatchdog();
+
+  // 4. Listen on configured port
   app.listen(CONFIG.PORT, CONFIG.HOST, () => {
     console.log(`[CloudCast Sports Studio] Backend API active on http://${CONFIG.HOST}:${CONFIG.PORT}`);
     console.log(`[CloudCast Sports Studio] Worker ID: ${CONFIG.WORKER_ID} | Max Jobs: ${CONFIG.MAX_CONCURRENT_JOBS}`);

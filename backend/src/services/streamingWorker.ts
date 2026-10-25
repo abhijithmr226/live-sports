@@ -11,7 +11,8 @@ import {
   addStreamLog, 
   addAuditLog, 
   getRunningJobs,
-  getJobById
+  getJobById,
+  listStreams
 } from '../db';
 import { decryptSecret } from '../security/encryption';
 import { redactSecrets } from '../security/redact';
@@ -46,7 +47,7 @@ class StreamingEngine extends EventEmitter {
   }
 
   /**
-   * Reconcile jobs after system/worker restart.
+   * Reconcile jobs after system/worker restart and AUTOMATICALLY REVIVE THEM.
    */
   public async reconcileJobsOnStartup(): Promise<void> {
     const runningJobs = getRunningJobs();
@@ -56,7 +57,7 @@ class StreamingEngine extends EventEmitter {
         jobId: job.id,
         severity: 'WARN',
         eventType: 'RECOVERED_AFTER_RESTART',
-        message: `Worker restarted. Previous active job [${job.id}] was interrupted.`
+        message: `System or worker reboot detected. Auto-Wakeup Engine: Restoring live broadcast automatically...`
       });
 
       updateStreamingJob(job.id, {
@@ -65,8 +66,47 @@ class StreamingEngine extends EventEmitter {
         errorSummary: 'Worker process restarted while job was active'
       });
 
-      updateStreamStatus(job.streamId, 'STOPPED', null);
+      // Automatically re-awaken and launch stream within 1.5 seconds
+      setTimeout(async () => {
+        try {
+          const currentStream = getStreamById(job.streamId);
+          if (currentStream && !this.activeProcesses.has(job.streamId)) {
+            console.log(`[Auto-Wakeup Engine] Restoring live relay for stream [${job.streamId}]...`);
+            await this.startStream(job.streamId, 'SYSTEM_AUTO_WAKEUP');
+          }
+        } catch (err: unknown) {
+          console.error(`[Auto-Wakeup Engine] Failed to revive stream [${job.streamId}]:`, err);
+        }
+      }, 1500);
     }
+  }
+
+  /**
+   * Continuous Dead-Man Revival Watchdog:
+   * Periodically inspects all streams in DB. If any stream is marked LIVE but
+   * its relay process is missing, automatically restarts it immediately.
+   */
+  public startAutonomousRevivalWatchdog(): void {
+    setInterval(async () => {
+      try {
+        const liveStreams = listStreams(undefined, 'LIVE');
+        for (const strm of liveStreams) {
+          if (!this.activeProcesses.has(strm.id) && !this.reconnectTimers.has(strm.id)) {
+            console.log(`[Dead-Man Watchdog] Inconsistency detected for stream [${strm.id}]. Resurrecting relay...`);
+            addStreamLog({
+              streamId: strm.id,
+              jobId: strm.currentJobId || 'watchdog_revive',
+              severity: 'WARN',
+              eventType: 'RECONNECT_ATTEMPT',
+              message: `Continuous Autonomous Watchdog: Stream process revived automatically. Ensuring 24/7 uninterrupted uptime.`
+            });
+            await this.startStream(strm.id, 'CONTINUOUS_REVIVAL_WATCHDOG');
+          }
+        }
+      } catch {
+        // Ignored
+      }
+    }, 15000);
   }
 
   public getActiveJobsCount(): number {
