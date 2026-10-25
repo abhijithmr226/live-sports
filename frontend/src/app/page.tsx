@@ -243,6 +243,8 @@ export default function OBSStudioPage() {
     }
   };
 
+  const isLive = stream?.status === 'LIVE' || stream?.status === 'RECONNECTING';
+
   const handleSaveSourceUrl = async () => {
     if (!selectedStreamId || !sourceUrlInput.trim()) return;
     setActionLoading(true);
@@ -252,8 +254,13 @@ export default function OBSStudioPage() {
         sourceUrl: sourceUrlInput.trim()
       });
       setSourceEditing(false);
+      if (isLive) {
+        setStatusMessage('Source URL updated. Restarting live broadcast with new source...');
+        await api.restartStream(selectedStreamId);
+      } else {
+        setStatusMessage('Source URL applied. Ready to stream.');
+      }
       await loadStreamDetails(selectedStreamId);
-      setStatusMessage('Source URL applied. Pipeline will auto-stream new source.');
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update source URL');
@@ -280,8 +287,13 @@ export default function OBSStudioPage() {
 
       await api.updateDestination(stream.destination.id, updatePayload);
       setOutputEditing(false);
+      if (isLive) {
+        setStatusMessage('Output destination saved! Reconnecting live broadcast to new target...');
+        await api.restartStream(selectedStreamId);
+      } else {
+        setStatusMessage('Stream output destination saved! Ready for live broadcast.');
+      }
       await loadStreamDetails(selectedStreamId);
-      setStatusMessage('Stream output destination saved! Ready for live broadcast.');
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update stream output');
@@ -300,7 +312,13 @@ export default function OBSStudioPage() {
           audioVolumeBoostDb: db
         }
       });
-      setStatusMessage(`Audio gain set to +${db}dB.`);
+      if (isLive) {
+        setStatusMessage(`Audio gain set to +${db}dB. Re-applying to live stream...`);
+        await api.restartStream(selectedStreamId);
+      } else {
+        setStatusMessage(`Audio gain set to +${db}dB.`);
+      }
+      await loadStreamDetails(selectedStreamId);
       setTimeout(() => setStatusMessage(null), 3000);
     } catch {
       // Ignored
@@ -315,7 +333,6 @@ export default function OBSStudioPage() {
     setTimeout(() => setWatermarkCopied(false), 2500);
   };
 
-  const isLive = stream?.status === 'LIVE' || stream?.status === 'RECONNECTING';
 
   const formatUptime = (seconds: number = 0) => {
     const h = Math.floor(seconds / 3600).toString().padStart(2, '0');

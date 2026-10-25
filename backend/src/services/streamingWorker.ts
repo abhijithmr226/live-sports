@@ -263,9 +263,15 @@ class StreamingEngine extends EventEmitter {
       '-err_detect', 'ignore_err',
       '-fflags', '+nobuffer+genpts+discardcorrupt',
       '-flags', 'low_delay',
-      '-analyzeduration', '10000000',
-      '-probesize', '10000000',
+      '-analyzeduration', '3000000',
+      '-probesize', '3000000',
       '-i', stream.sourceUrl
+    );
+
+    // Explicit stream mapping: take primary video and audio only, discarding SCTE-35 metadata
+    args.push(
+      '-map', '0:v:0?',
+      '-map', '0:a:0?'
     );
 
     // YouTube Live compatibility: Standard FLV RTMP requires H.264 video.
@@ -358,11 +364,14 @@ class StreamingEngine extends EventEmitter {
       }
     }, 30000);
 
-    // Watchdog check every 10 seconds: If FFmpeg stalls with no stderr data for 30 seconds, force restart
+    let connectedReported = false;
+
+    // Watchdog check every 10 seconds: If FFmpeg stalls with no progress, restart relay
     procInfo.watchdogTimer = setInterval(() => {
       if (procInfo.isIntentionalStop) return;
       const idleSec = Math.round((Date.now() - procInfo.lastProgressAt) / 1000);
-      if (idleSec >= 30) {
+      const threshold = connectedReported ? 60 : 90;
+      if (idleSec >= threshold) {
         addStreamLog({
           streamId: stream.id,
           jobId: job.id,
@@ -402,8 +411,6 @@ class StreamingEngine extends EventEmitter {
       startedAt: new Date().toISOString()
     });
     updateStreamStatus(stream.id, 'LIVE', job.id);
-
-    let connectedReported = false;
 
     // Stderr contains FFmpeg progress updates
     child.stderr.on('data', (data: Buffer) => {
