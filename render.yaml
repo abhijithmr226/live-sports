@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: cloudcast-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "4000"
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        value: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - key: WORKER_ID
+        value: render-cloud-worker-01
+      - key: MAX_CONCURRENT_JOBS
+        value: "4"
+      - key: DATABASE_PATH
+        value: ./cloudcast.db
+
+  - type: web
+    name: cloudcast-frontend
+    runtime: docker
+    dockerfilePath: frontend/Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: NODE_ENV
+        value: production

@@ -2,6 +2,9 @@
 
 **CloudCast Sports Studio** is a production-grade sports live-streaming management and cloud relay platform. It enables broadcasters and sports operators to take authorized live HLS/M3U8 video feeds, relay them persistently via cloud-hosted FFmpeg workers to YouTube Live (or any RTMP/RTMPS destination), schedule broadcasts across timezones, monitor stream telemetry in real time, and manage sports fixtures.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/abhijithmr226/live-sports)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?template=https://github.com/abhijithmr226/live-sports)
+
 ---
 
 ## ⚡ Core Operational Capabilities
