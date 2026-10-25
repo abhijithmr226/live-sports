@@ -135,9 +135,20 @@ router.post('/:id/start', requireAuth, async (req: AuthenticatedRequest, res: Re
     return;
   }
 
-  if (stream.status === 'LIVE' || stream.status === 'STARTING') {
-    res.status(409).json({ error: 'Stream is already broadcasting live' });
-    return;
+  // If already live, starting, or reconnecting, cleanly restart instead of throwing 409 Conflict
+  if (stream.status === 'LIVE' || stream.status === 'STARTING' || stream.status === 'RECONNECTING') {
+    try {
+      const scheduledStopAt = req.body.scheduledStopAt ? String(req.body.scheduledStopAt) : undefined;
+      await streamingEngine.stopStream(stream.id, req.user!.id);
+      await new Promise(r => setTimeout(r, 1200));
+      const job = await streamingEngine.startStream(stream.id, req.user!.id, scheduledStopAt);
+      const updated = getStreamById(stream.id, req.user!.id);
+      res.json({ success: true, message: 'Broadcast relay restarted cleanly', job, stream: updated });
+      return;
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
   }
 
   try {

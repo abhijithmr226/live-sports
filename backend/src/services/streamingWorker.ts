@@ -165,6 +165,12 @@ class StreamingEngine extends EventEmitter {
       throw new Error(`Stream [${streamId}] not found`);
     }
 
+    // Cleanly terminate any previously running process or retry timer for this stream
+    if (this.activeProcesses.has(streamId) || this.reconnectTimers.has(streamId)) {
+      await this.stopStream(streamId, userId);
+      await new Promise(r => setTimeout(r, 1200));
+    }
+
     if (!stream.sourceUrl || !stream.sourceUrl.trim()) {
       throw new Error('Cannot start broadcast: Source URL is empty');
     }
@@ -243,6 +249,13 @@ class StreamingEngine extends EventEmitter {
 
     const args: string[] = [];
 
+    // Browser User-Agent for HTTP/HTTPS/HLS to bypass CDN anti-bot blocks
+    if (lowerUrl.startsWith('http://') || lowerUrl.startsWith('https://')) {
+      args.push(
+        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+      );
+    }
+
     // Protocol-specific resiliency inputs
     if (isRtsp) {
       // Force TCP for RTSP to prevent packet drop and frame corruption over UDP
@@ -255,8 +268,13 @@ class StreamingEngine extends EventEmitter {
       // Read at native framerate for VOD file live streaming so it relays in real-time
       args.push('-re');
     } else if (isHls) {
-      // HLS live stream: rw_timeout protects against dropped TCP connections
-      args.push('-rw_timeout', '15000000');
+      // HLS live stream: auto-reconnect on dropped TCP socket (WSAECONNRESET)
+      args.push(
+        '-reconnect', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '2',
+        '-rw_timeout', '15000000'
+      );
     } else {
       // Progressive HTTP / HTTPS live stream with low-delay reconnect
       args.push(
@@ -301,7 +319,7 @@ class StreamingEngine extends EventEmitter {
         '-map', '[outv]',
         '-map', '0:a:0?',
         '-c:v', 'libx264',
-        '-preset', profile.preset || 'ultrafast',
+        '-preset', 'ultrafast',
         '-tune', 'zerolatency',
         '-b:v', `${profile.videoBitrate || 4500}k`,
         '-maxrate', `${(profile.videoBitrate || 4500) + 500}k`,
