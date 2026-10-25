@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ISL Broadcast Scorebug — Kerala Blasters vs Mumbai City</title>
+<style>
+:root{--purple:#31004b;--kbfc:#f3c928;--mumbai:#62c5e8;--white:#fff}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
+body{display:flex;align-items:flex-start;justify-content:center;padding:24px}
+#stage{position:relative;transform-origin:top center}
+.scorebug{position:relative;display:flex;align-items:center;height:52px;width:452px;filter:drop-shadow(0 4px 8px #0006);opacity:0;transform:translateY(-14px);animation:intro .55s cubic-bezier(.2,.9,.25,1) .12s forwards}
+.team-panel{height:48px;display:flex;align-items:center;position:relative;overflow:hidden;flex:1;min-width:0}
+.team-panel.home{background:linear-gradient(110deg,#101a8c 0%,#2824c6 72%,#12145b 100%);padding:0 8px 0 13px;justify-content:flex-start;clip-path:polygon(0 0,100% 0,88% 100%,0 100%)}
+.team-panel.away{background:linear-gradient(110deg,#e6ff25 0%,#f4ff31 100%);padding:0 13px 0 8px;justify-content:flex-end;clip-path:polygon(12% 0,100% 0,100% 100%,0 100%)}
+.team-panel:after{content:"";position:absolute;top:-30%;bottom:-30%;width:50px;background:#ffffff12;transform:skewX(-28deg);pointer-events:none}
+.team-panel.home:after{right:18px}.team-panel.away:after{left:18px}
+.team-code{position:relative;z-index:1;font-size:30px;font-weight:950;line-height:1;letter-spacing:.2px;color:white;white-space:nowrap;text-shadow:0 1px 1px #0002}
+.away .team-code{color:#080808}
+.center-mark{position:absolute;z-index:4;left:50%;top:50%;transform:translate(-50%,-57%);width:68px;height:70px;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.isl-logo{position:absolute;width:60px;height:60px;object-fit:contain;filter:drop-shadow(0 1px 1px #000)}
+.score{position:absolute;z-index:5;top:-3px;font-size:58px;line-height:1;font-weight:1000;color:#fff;letter-spacing:-3px;text-shadow:0 2px 5px #0003;font-variant-numeric:tabular-nums}
+.score.home-score{left:calc(50% - 83px)}.score.away-score{right:calc(50% - 83px)}
+.score.pop{animation:scorePop .42s cubic-bezier(.2,1.4,.4,1)}
+.timer-tab{position:absolute;z-index:3;left:50%;top:45px;transform:translateX(-50%);width:142px;height:37px;border-radius:0 0 9px 9px;background:linear-gradient(180deg,#3b0750,#270038);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:950;font-size:28px;letter-spacing:.3px;box-shadow:0 3px 5px #0003;font-variant-numeric:tabular-nums}
+.status-dot{position:absolute;right:5px;top:5px;width:6px;height:6px;border-radius:50%;background:#ff4e5d;opacity:0}
+.scorebug.live .status-dot{opacity:1;animation:blink 1.2s infinite}
+.goal-flash{position:absolute;z-index:8;top:90px;left:50%;transform:translateX(-50%) translateY(-8px);padding:8px 20px;background:#f5d629;color:#111;font-size:18px;font-weight:1000;letter-spacing:2px;opacity:0;pointer-events:none;white-space:nowrap;box-shadow:0 4px 12px #0005}
+.goal-flash.show{animation:goal .35s ease-out forwards}
+.controls{display:none;position:fixed;left:12px;bottom:12px;gap:6px;flex-wrap:wrap;padding:10px;background:#111e;border:1px solid #fff3;border-radius:8px;color:white;font:12px Arial;z-index:99}
+.controls button,.controls input{background:#24202c;color:white;border:1px solid #ffffff40;border-radius:4px;padding:6px;cursor:pointer}
+@keyframes intro{to{opacity:1;transform:translateY(0)}}
+@keyframes scorePop{0%{transform:scale(.65);opacity:.35}65%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+@keyframes blink{50%{opacity:.2}}
+@keyframes goal{0%{opacity:0;transform:translateX(-50%) translateY(-8px) scale(.92)}100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+@media(max-width:500px){body{padding:18px 8px}.scorebug{transform:scale(.78);transform-origin:top center;width:452px;margin-bottom:0}.team-code{font-size:27px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="stage">
+ <div class="scorebug" id="scorebug">
+  <div class="team-panel home"><span class="team-code" id="homeCode">KBFC</span></div>
+  <div class="team-panel away"><span class="team-code" id="awayCode">MCFC</span></div>
+  <div class="center-mark"><img class="isl-logo" alt="Indian Super League logo" src="https://upload.wikimedia.org/wikipedia/commons/3/3d/AlFF_MG_Indian_Super_League_2026-27.svg"></div>
+  <span class="score home-score" id="homeScore">0</span><span class="score away-score" id="awayScore">0</span>
+  <div class="timer-tab" id="clock">00:00</div><span class="status-dot"></span>
+ </div>
+ <div class="goal-flash" id="goalFlash">GOAL!</div>
+ <div id="matchMeta" style="margin:84px auto 0;text-align:center;color:#fff;font:800 11px Arial;letter-spacing:1px;text-shadow:0 1px 4px #000;white-space:nowrap">KOCHI · 25 OCT 2026 · 19:30 IST</div>
+ <div id="feedNotice" style="margin:7px auto 0;text-align:center;color:#ffd84d;font:700 9px Arial;letter-spacing:1px;text-shadow:0 1px 4px #000;white-space:nowrap">LIVE SCORE FEED CONNECTED</div>
+</div>
+<div class="controls" id="controls">
+ <button id="start">Kick-off / Resume</button><button id="pause">Pause</button>
+ <label>Minute <input id="minute" type="number" min="0" max="130" value="0" style="width:48px"></label>
+ <button id="hg">KBFC +1</button><button id="ag">MCFC +1</button>
+ <button id="gg1">Goal KBFC</button><button id="gg2">Goal MCFC</button>
+ <button id="ht">Half-time</button><button id="ft">Full-time</button><button id="reset">Reset</button>
+</div>
+<script>
+(()=>{const q=new URLSearchParams(location.search),$=id=>document.getElementById(id),get=(k,d)=>q.has(k)?q.get(k):d;
+const n=(v,d=0)=>{v=Number(v);return Number.isFinite(v)?Math.max(0,Math.min(130,Math.floor(v))):d};
+const kickoff = new Date('2026-10-25T19:30:00+05:30');
+const state={home:n(get('homeScore','0')),away:n(get('awayScore','0')),seconds:n(get('minute','0'))*60,running:get('state','pre')==='live',manual:get('state','pre')!=='pre'};
+
+$('homeCode').textContent=get('homeabbr','KBFC').toUpperCase().slice(0,5);$('awayCode').textContent=get('awayabbr','MCFC').toUpperCase().slice(0,5);
+const stage=$('stage'),pos=get('pos','tc'),scale=Math.max(.5,Math.min(2,Number(get('scale','1'))||1));
+document.body.style.justifyContent=pos.includes('r')?'flex-end':pos.includes('l')?'flex-start':'center';document.body.style.alignItems=pos.includes('b')?'flex-end':'flex-start';
+stage.style.transform=`scale(${scale})`;stage.style.transformOrigin=(pos.includes('b')?'bottom':'top')+' '+(pos.includes('r')?'right':pos.includes('l')?'left':'center');
+function draw(){
+ let m=Math.floor(state.seconds/60),s=state.seconds%60;
+ if(!state.manual && !state.running){
+   const left=Math.max(0,Math.floor((kickoff-Date.now())/1000));
+   if(left>0){const h=Math.floor(left/3600),mm=Math.floor((left%3600)/60),ss=left%60;$('clock').textContent=h>0?`${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`:`${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;$('matchMeta').textContent='KICK-OFF COUNTDOWN · KOCHI · 19:30 IST';}
+   else{$('clock').textContent='00:00';$('matchMeta').textContent='SCHEDULED KICK-OFF TIME REACHED';}
+ } else {$('clock').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+ $('homeScore').textContent=state.home;$('awayScore').textContent=state.away
+}
+function score(side,celebrate=false){state[side]++;const el=$(side+'Score');el.textContent=state[side];el.classList.remove('pop');void el.offsetWidth;el.classList.add('pop');if(celebrate){const f=$('goalFlash');f.textContent='GOAL! '+(side==='home'?'KBFC':'MCFC');f.classList.remove('show');void f.offsetWidth;f.classList.add('show');clearTimeout(score.t);score.t=setTimeout(()=>f.classList.remove('show'),4500)}draw()}
+setInterval(()=>{if(state.running){state.seconds++;draw()}else if(!state.manual){draw()}},1000);draw();
+if(get('controls','1')==='1')$('controls').style.display='flex';
+$('start').onclick=()=>{state.manual=true;state.running=true;$('scorebug').classList.add('live');$('feedNotice').textContent='LIVE MATCH ACTIVE'};$('pause').onclick=()=>{state.running=false;$('scorebug').classList.remove('live')};
+$('minute').onchange=e=>{state.manual=true;state.seconds=n(e.target.value)*60;draw()};
+$('hg').onclick=()=>{state.manual=true;score('home')};$('ag').onclick=()=>{state.manual=true;score('away')};$('gg1').onclick=()=>{state.manual=true;score('home',true)};$('gg2').onclick=()=>{state.manual=true;score('away',true)};
+$('ht').onclick=()=>{state.running=false;$('clock').textContent='HT';$('scorebug').classList.remove('live')};
+$('ft').onclick=()=>{state.running=false;$('clock').textContent='FT';$('scorebug').classList.remove('live')};
+$('reset').onclick=()=>{state.home=0;state.away=0;state.seconds=0;state.running=false;state.manual=true;$('scorebug').classList.remove('live');draw()};
+if(state.running)$('scorebug').classList.add('live');
+if(get('state','')==='ht')$('clock').textContent='HT';if(['ft','final'].includes(get('state','')))$('clock').textContent='FT';
+const g=get('goal','');if(g==='home'||g==='away')setTimeout(()=>score(g,true),700);
+
+// Listen to postMessage from parent Studio Control Room for live remote score changes
+window.addEventListener('message', (e) => {
+  if (!e.data || !e.data.action) return;
+  if (e.data.action === 'SCORE_HOME') { state.manual = true; score('home', e.data.celebrate); }
+  if (e.data.action === 'SCORE_AWAY') { state.manual = true; score('away', e.data.celebrate); }
+  if (e.data.action === 'START_CLOCK') { state.manual = true; state.running = true; $('scorebug').classList.add('live'); $('feedNotice').textContent = 'LIVE MATCH ACTIVE'; }
+  if (e.data.action === 'PAUSE_CLOCK') { state.running = false; $('scorebug').classList.remove('live'); }
+  if (e.data.action === 'HALF_TIME') { state.running = false; $('clock').textContent = 'HT'; $('scorebug').classList.remove('live'); }
+  if (e.data.action === 'FULL_TIME') { state.running = false; $('clock').textContent = 'FT'; $('scorebug').classList.remove('live'); }
+  if (e.data.action === 'RESET') { state.home = 0; state.away = 0; state.seconds = 0; state.running = false; state.manual = true; $('scorebug').classList.remove('live'); draw(); }
+});
+})();
+</script></body></html>

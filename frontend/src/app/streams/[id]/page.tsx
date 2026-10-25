@@ -33,10 +33,16 @@ function StreamControlContent({ params }: { params: Promise<{ id: string }> }) {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showOverlay, setShowOverlay] = useState(true);
 
   // Real-time telemetry state
   const [telemetry, setTelemetry] = useState<StreamTelemetryUpdate | null>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const overlayIframeRef = useRef<HTMLIFrameElement>(null);
+
+  const sendOverlayAction = (action: string, celebrate = false) => {
+    overlayIframeRef.current?.contentWindow?.postMessage({ action, celebrate }, '*');
+  };
 
   const fetchDetails = async () => {
     try {
@@ -255,8 +261,19 @@ function StreamControlContent({ params }: { params: Promise<{ id: string }> }) {
               </div>
             )}
 
+            {/* Live ISL Scorebug Broadcast Graphics Overlay */}
+            {showOverlay && (
+              <div className="absolute inset-0 pointer-events-none z-20 flex items-start justify-center pt-1 overflow-hidden">
+                <iframe
+                  ref={overlayIframeRef}
+                  src="/overlays/isl-scorebug.html?controls=0&scale=0.85"
+                  className="w-full h-full border-0 bg-transparent pointer-events-auto"
+                />
+              </div>
+            )}
+
             {/* Top-Left Live Badge Overlay */}
-            <div className="absolute top-3 left-3 flex items-center gap-2">
+            <div className="absolute top-3 left-3 z-30 flex items-center gap-2">
               <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider ${
                 isLive ? 'bg-red-600 text-white pulse-onair' : 'bg-black/60 text-slate-400 border border-slate-700'
               }`}>
@@ -269,11 +286,117 @@ function StreamControlContent({ params }: { params: Promise<{ id: string }> }) {
 
             {/* Top-Right Uptime Stopwatch Overlay */}
             {isLive && (
-              <div className="absolute top-3 right-3 bg-black/70 border border-slate-800 px-2.5 py-0.5 rounded text-[11px] font-mono text-emerald-400 flex items-center gap-1.5">
+              <div className="absolute top-3 right-3 z-30 bg-black/70 border border-slate-800 px-2.5 py-0.5 rounded text-[11px] font-mono text-emerald-400 flex items-center gap-1.5">
                 <Clock className="w-3 h-3 text-emerald-400" />
                 <span>Uptime: {telemetry?.uptimeSeconds ? `${Math.floor(telemetry.uptimeSeconds / 60)}m ${telemetry.uptimeSeconds % 60}s` : '0m 0s'}</span>
               </div>
             )}
+          </div>
+
+          {/* ISL Live Graphics Scorebug Controller */}
+          <div className="bg-[#0E1726] border border-[#19263D] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-[#19263D] pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">ISL Scorebug Broadcast Graphics Controller</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOverlay(!showOverlay)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                    showOverlay ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {showOverlay ? 'Overlay Visible on Feed' : 'Overlay Hidden'}
+                </button>
+                <a
+                  href="/overlays/isl-scorebug.html"
+                  target="_blank"
+                  className="text-[11px] text-indigo-400 hover:text-indigo-300 font-mono flex items-center gap-1"
+                  title="Open full transparent overlay for OBS / vMix Browser Source"
+                >
+                  OBS Browser Source ↗
+                </a>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('SCORE_HOME')}
+                  className="flex-1 py-1.5 rounded bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/30 text-xs font-bold transition-colors"
+                >
+                  KBFC +1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('SCORE_HOME', true)}
+                  className="px-2 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold shadow-sm"
+                >
+                  Goal!
+                </button>
+              </div>
+
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('SCORE_AWAY')}
+                  className="flex-1 py-1.5 rounded bg-yellow-400/20 hover:bg-yellow-400/30 text-yellow-300 border border-yellow-400/30 text-xs font-bold transition-colors"
+                >
+                  MCFC +1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('SCORE_AWAY', true)}
+                  className="px-2 py-1.5 rounded bg-yellow-400 hover:bg-yellow-300 text-slate-950 text-xs font-extrabold shadow-sm"
+                >
+                  Goal!
+                </button>
+              </div>
+
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('START_CLOCK')}
+                  className="flex-1 py-1.5 rounded bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/30 text-xs font-bold"
+                >
+                  Start Clock
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('PAUSE_CLOCK')}
+                  className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                >
+                  Pause
+                </button>
+              </div>
+
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('HALF_TIME')}
+                  className="flex-1 py-1.5 rounded bg-[#162235] hover:bg-[#1E2D45] text-slate-300 text-xs font-medium"
+                >
+                  HT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('FULL_TIME')}
+                  className="flex-1 py-1.5 rounded bg-[#162235] hover:bg-[#1E2D45] text-slate-300 text-xs font-medium"
+                >
+                  FT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendOverlayAction('RESET')}
+                  className="px-2 py-1.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Telemetry Gauge Cards */}
