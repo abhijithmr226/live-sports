@@ -90,5 +90,20 @@
       <span class="title-sub">Live Stream • Ultra HD</span>
     </div>
   </div>
+  <script>
+    // Support URL parameters for position: ?pos=top-right (default), bottom-right, top-left, bottom-left
+    const params = new URLSearchParams(window.location.search);
+    const pos = (params.get('pos') || 'top-right').toLowerCase();
+    if (pos === 'bottom-right') {
+      document.body.style.justifyContent = 'flex-end';
+      document.body.style.alignItems = 'flex-end';
+    } else if (pos === 'top-left') {
+      document.body.style.justifyContent = 'flex-start';
+      document.body.style.alignItems = 'flex-start';
+    } else if (pos === 'bottom-left') {
+      document.body.style.justifyContent = 'flex-start';
+      document.body.style.alignItems = 'flex-end';
+    }
+  </script>
 </body>
 </html>

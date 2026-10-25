@@ -49,14 +49,15 @@ export default function OBSStudioPage() {
   const [outputEditing, setOutputEditing] = useState(false);
   const [showStreamKey, setShowStreamKey] = useState(false);
 
-  // Audio Mixer State
-  const [volumeGain, setVolumeGain] = useState<number>(0);
+  // Audio Mixer State: Default to +3dB Sports Optimization
+  const [volumeGain, setVolumeGain] = useState<number>(3);
   const [audioFader, setAudioFader] = useState<number>(100);
   const [isMuted, setIsMuted] = useState(false);
   const [activeScene, setActiveScene] = useState<string>('Live Match Feed');
 
-  // Watermark State (Krynn Visuals & Stream)
+  // Watermark State (Krynn Visuals & Stream): Default to Top-Right
   const [showWatermark, setShowWatermark] = useState(true);
+  const [watermarkPos, setWatermarkPos] = useState<'top-right' | 'bottom-right'>('top-right');
   const [watermarkCopied, setWatermarkCopied] = useState(false);
 
   // Video element & HLS player
@@ -487,7 +488,9 @@ export default function OBSStudioPage() {
               KRYNN VISUALS & STREAM WATERMARK (PROFESSIONAL BROADCAST BUG)
               ========================================================================= */}
           {showWatermark && (
-            <div className="absolute top-4 right-4 pointer-events-none z-20">
+            <div className={`absolute pointer-events-none z-20 transition-all ${
+              watermarkPos === 'top-right' ? 'top-4 right-4' : 'bottom-12 right-4'
+            }`}>
               <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-[#0e121b]/90 border border-cyan-400/40 shadow-2xl backdrop-blur-md">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-500 pulse-onair shadow-[0_0_8px_#ef4444]" />
                 <div className="flex flex-col text-left">
@@ -535,6 +538,15 @@ export default function OBSStudioPage() {
             >
               Watermark: {showWatermark ? 'ON' : 'OFF'}
             </button>
+            {showWatermark && (
+              <button
+                onClick={() => setWatermarkPos(watermarkPos === 'top-right' ? 'bottom-right' : 'top-right')}
+                className="px-2 py-1 rounded text-[11px] font-mono font-bold bg-black/70 hover:bg-black/90 border border-white/10 text-cyan-300 transition-colors"
+                title="Toggle Watermark Position: Top-Right / Bottom-Right"
+              >
+                {watermarkPos === 'top-right' ? 'Top-R' : 'Btm-R'}
+              </button>
+            )}
             <button
               onClick={() => {
                 if (videoRef.current && videoRef.current.requestFullscreen) {
