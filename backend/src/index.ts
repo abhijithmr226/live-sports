@@ -135,13 +135,13 @@ async function startServer() {
     // 3. Start autonomous dead-man revival watchdog
     streamingEngine.startAutonomousRevivalWatchdog();
 
-    // 4. Anti-Sleep Keepalive Heartbeat: Pings health endpoint every 10 minutes
+    // 4. Anti-Sleep Keepalive Heartbeat: Pings health endpoint every 4 minutes
     const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${CONFIG.PORT}`;
     setInterval(() => {
       fetch(`${selfUrl}/api/health`)
-        .then(() => console.log('[CloudCast Sports Studio] Keep-alive heartbeat dispatched'))
+        .then(() => console.log('[CloudCast Sports Studio] Anti-sleep heartbeat dispatched'))
         .catch(() => {});
-    }, 10 * 60 * 1000);
+    }, 4 * 60 * 1000);
   });
 }
 
