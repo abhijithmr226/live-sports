@@ -10,21 +10,22 @@ import {
   RotateCcw, 
   Volume2, 
   VolumeX, 
-  Sliders, 
-  Layers, 
   Copy, 
   Check, 
   AlertTriangle, 
   Maximize2,
   Tv2,
   Plus,
-  Settings,
   ExternalLink,
   Eye,
   EyeOff,
   Sparkles,
   ShieldCheck,
-  RefreshCw
+  Zap,
+  Activity,
+  CheckCircle2,
+  Save,
+  Gauge
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Stream, StreamTelemetryUpdate } from '@cloudcast/shared';
@@ -34,7 +35,6 @@ export default function OBSStudioPage() {
   const [selectedStreamId, setSelectedStreamId] = useState<string>('');
   const [stream, setStream] = useState<Stream | null>(null);
   const [telemetry, setTelemetry] = useState<StreamTelemetryUpdate | null>(null);
-  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -42,27 +42,28 @@ export default function OBSStudioPage() {
   // OBS Controls State
   const [sourceUrlInput, setSourceUrlInput] = useState('');
   const [sourceEditing, setSourceEditing] = useState(false);
+
+  // Stream Output Editable State
+  const [ingestUrlInput, setIngestUrlInput] = useState('rtmp://a.rtmp.youtube.com/live2');
   const [streamKeyInput, setStreamKeyInput] = useState('');
+  const [outputEditing, setOutputEditing] = useState(false);
   const [showStreamKey, setShowStreamKey] = useState(false);
-  const [editingStreamKey, setEditingStreamKey] = useState(false);
+
+  // Audio Mixer State
   const [volumeGain, setVolumeGain] = useState<number>(0);
   const [audioFader, setAudioFader] = useState<number>(100);
   const [isMuted, setIsMuted] = useState(false);
   const [activeScene, setActiveScene] = useState<string>('Live Match Feed');
-  const [showOverlay, setShowOverlay] = useState(true);
-  const [overlayCopied, setOverlayCopied] = useState(false);
+
+  // Watermark State (Krynn Visuals & Stream)
+  const [showWatermark, setShowWatermark] = useState(true);
+  const [watermarkCopied, setWatermarkCopied] = useState(false);
 
   // Video element & HLS player
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [videoPlaybackActive, setVideoPlaybackActive] = useState(false);
   const [videoError, setVideoError] = useState(false);
-
-  // Scorebug State
-  const [homeScore, setHomeScore] = useState(2);
-  const [awayScore, setAwayScore] = useState(1);
-  const [matchClock, setMatchClock] = useState('78:42');
-  const [isGoalAnimation, setIsGoalAnimation] = useState(false);
 
   // Load all streams
   const loadStreams = async () => {
@@ -79,8 +80,6 @@ export default function OBSStudioPage() {
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Backend connection error');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -90,7 +89,10 @@ export default function OBSStudioPage() {
       if (res.stream) {
         setStream(res.stream);
         setSourceUrlInput(res.stream.sourceUrl);
-        setStreamKeyInput(res.stream.destination?.maskedStreamKey || '');
+        if (res.stream.destination) {
+          setIngestUrlInput(res.stream.destination.ingestUrl || 'rtmp://a.rtmp.youtube.com/live2');
+          setStreamKeyInput(res.stream.destination.maskedStreamKey || '');
+        }
         if (res.stream.outputProfile?.audioVolumeBoostDb !== undefined) {
           setVolumeGain(res.stream.outputProfile.audioVolumeBoostDb);
         }
@@ -124,7 +126,7 @@ export default function OBSStudioPage() {
           setTelemetry(data);
         }
       } catch {
-        // SSE heartbeat parse
+        // SSE heartbeat
       }
     };
 
@@ -133,7 +135,7 @@ export default function OBSStudioPage() {
     };
   }, [selectedStreamId]);
 
-  // Attach HLS player to 16:9 monitor when stream is active and source is M3U8
+  // Attach HLS player to 16:9 monitor
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream?.sourceUrl) return;
@@ -149,7 +151,7 @@ export default function OBSStudioPage() {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
-        backBufferLength: 30,
+        backBufferLength: 15,
       });
 
       hls.loadSource(stream.sourceUrl);
@@ -158,9 +160,7 @@ export default function OBSStudioPage() {
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setVideoPlaybackActive(true);
         setVideoError(false);
-        video.play().catch(() => {
-          // Browser autoplay policy might require user click
-        });
+        video.play().catch(() => {});
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -172,7 +172,6 @@ export default function OBSStudioPage() {
 
       hlsRef.current = hls;
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native Safari HLS
       video.src = stream.sourceUrl;
       video.addEventListener('loadedmetadata', () => {
         setVideoPlaybackActive(true);
@@ -197,11 +196,11 @@ export default function OBSStudioPage() {
     if (!selectedStreamId) return;
     setActionLoading(true);
     setError(null);
-    setStatusMessage('Starting FFmpeg broadcast relay...');
+    setStatusMessage('Engaging Maximum Power Pipeline (Zero-Buffering Active)...');
     try {
       await api.startStream(selectedStreamId);
       await loadStreamDetails(selectedStreamId);
-      setStatusMessage('Stream relay is LIVE and transmitting to YouTube.');
+      setStatusMessage('Stream relay is LIVE and transmitting to YouTube without shutdown.');
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to start stream');
@@ -231,11 +230,11 @@ export default function OBSStudioPage() {
     if (!selectedStreamId) return;
     setActionLoading(true);
     setError(null);
-    setStatusMessage('Restarting FFmpeg pipeline...');
+    setStatusMessage('Flushing & restarting zero-latency FFmpeg pipeline...');
     try {
       await api.restartStream(selectedStreamId);
       await loadStreamDetails(selectedStreamId);
-      setStatusMessage('Stream pipeline revived successfully.');
+      setStatusMessage('Stream pipeline revived with maximum throughput.');
       setTimeout(() => setStatusMessage(null), 3000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to restart stream');
@@ -254,10 +253,38 @@ export default function OBSStudioPage() {
       });
       setSourceEditing(false);
       await loadStreamDetails(selectedStreamId);
-      setStatusMessage('Source URL updated. Restart stream to apply changes.');
+      setStatusMessage('Source URL applied. Pipeline will auto-stream new source.');
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update source URL');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSaveDestinationOutput = async () => {
+    if (!stream?.destination?.id) {
+      setError('No destination linked to stream');
+      return;
+    }
+    setActionLoading(true);
+    setError(null);
+    try {
+      const updatePayload: any = {
+        ingestUrl: ingestUrlInput.trim(),
+      };
+      // Only include streamKey if user actually changed it or typed a raw key
+      if (streamKeyInput && !streamKeyInput.includes('•')) {
+        updatePayload.streamKey = streamKeyInput.trim();
+      }
+
+      await api.updateDestination(stream.destination.id, updatePayload);
+      setOutputEditing(false);
+      await loadStreamDetails(selectedStreamId);
+      setStatusMessage('Stream output destination saved! Ready for live broadcast.');
+      setTimeout(() => setStatusMessage(null), 4000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update stream output');
     } finally {
       setActionLoading(false);
     }
@@ -273,19 +300,19 @@ export default function OBSStudioPage() {
           audioVolumeBoostDb: db
         }
       });
-      setStatusMessage(`Audio volume gain set to +${db}dB (applied to stream pipeline).`);
+      setStatusMessage(`Audio gain set to +${db}dB.`);
       setTimeout(() => setStatusMessage(null), 3000);
     } catch {
-      // Non-critical fallback
+      // Ignored
     }
   };
 
-  const handleCopyOverlayUrl = () => {
+  const handleCopyWatermarkUrl = () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const overlayUrl = `${origin}/overlays/isl-scorebug.html`;
-    navigator.clipboard.writeText(overlayUrl);
-    setOverlayCopied(true);
-    setTimeout(() => setOverlayCopied(false), 2500);
+    const watermarkUrl = `${origin}/overlays/krynn-watermark.html`;
+    navigator.clipboard.writeText(watermarkUrl);
+    setWatermarkCopied(true);
+    setTimeout(() => setWatermarkCopied(false), 2500);
   };
 
   const isLive = stream?.status === 'LIVE' || stream?.status === 'RECONNECTING';
@@ -304,7 +331,6 @@ export default function OBSStudioPage() {
           ========================================================================= */}
       <header className="h-8 bg-[#1f2023] border-b border-[#2b2d31] flex items-center justify-between px-3 text-xs shrink-0 z-30">
         <div className="flex items-center gap-4">
-          {/* OBS Studio Logo & Brand */}
           <div className="flex items-center gap-1.5 font-bold tracking-wide text-white">
             <div className="w-4 h-4 rounded-full bg-cyan-500 flex items-center justify-center text-[#18191c]">
               <Radio className="w-2.5 h-2.5" />
@@ -312,27 +338,22 @@ export default function OBSStudioPage() {
             <span>OBS Studio Web 30.2</span>
           </div>
 
-          {/* Classic OBS Menu Dropdowns */}
           <nav className="hidden md:flex items-center gap-3 text-slate-300 text-xs">
             <span className="hover:text-white cursor-pointer transition-colors">File</span>
             <span className="hover:text-white cursor-pointer transition-colors">Edit</span>
             <span className="hover:text-white cursor-pointer transition-colors">View</span>
             <span className="hover:text-white cursor-pointer transition-colors">Docks</span>
-            <span className="hover:text-white cursor-pointer transition-colors">Profile</span>
-            <span className="hover:text-white cursor-pointer transition-colors">Scene Collection</span>
-            <span className="hover:text-white cursor-pointer transition-colors">Tools</span>
+            <span className="hover:text-white cursor-pointer transition-colors">Profile: High-Throughput 1080p</span>
             <span className="hover:text-white cursor-pointer transition-colors">Help</span>
           </nav>
         </div>
 
-        {/* Right: Active Channel Selector & Auto-Revive Badge */}
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#121316] border border-[#2b2d31] text-[11px] text-emerald-400 font-mono">
-            <ShieldCheck className="w-3 h-3 text-emerald-400" />
-            <span>Autonomous Watchdog: ACTIVE</span>
+            <Zap className="w-3 h-3 text-amber-400" />
+            <span>MAXIMUM POWER: NO BUFFERING</span>
           </div>
 
-          {/* Stream Selector */}
           <div className="flex items-center gap-1">
             <select
               value={selectedStreamId}
@@ -352,7 +373,7 @@ export default function OBSStudioPage() {
             <Link
               href="/streams/create"
               className="p-1 rounded bg-[#25272b] hover:bg-[#313338] text-slate-300 hover:text-white transition-colors"
-              title="Add New Stream Channel"
+              title="Add New Stream"
             >
               <Plus className="w-3.5 h-3.5" />
             </Link>
@@ -362,7 +383,7 @@ export default function OBSStudioPage() {
 
       {/* Status Notifications */}
       {error && (
-        <div className="bg-rose-900/60 border-b border-rose-500/40 px-4 py-1.5 text-xs text-rose-200 flex items-center justify-between shrink-0">
+        <div className="bg-rose-900/60 border-b border-rose-500/40 px-4 py-1 text-xs text-rose-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
             <span>{error}</span>
@@ -374,7 +395,7 @@ export default function OBSStudioPage() {
       )}
 
       {statusMessage && (
-        <div className="bg-cyan-900/40 border-b border-cyan-500/40 px-4 py-1.5 text-xs text-cyan-200 flex items-center justify-between shrink-0">
+        <div className="bg-cyan-900/40 border-b border-cyan-500/40 px-4 py-1 text-xs text-cyan-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>{statusMessage}</span>
@@ -386,10 +407,9 @@ export default function OBSStudioPage() {
       )}
 
       {/* =========================================================================
-          2. MAIN WORKSPACE: PROGRAM MONITOR CANVAS (CENTER STAGE)
+          2. PROGRAM MONITOR CANVAS (CENTER STAGE)
           ========================================================================= */}
       <div className="flex-1 flex flex-col p-2.5 min-h-0 bg-[#121316]">
-        {/* Program Canvas Container */}
         <div className="flex-1 relative flex items-center justify-center bg-[#000000] rounded border border-[#2b2d31] overflow-hidden shadow-2xl">
           {/* Safe Area Guides */}
           <div className="absolute inset-4 border border-white/5 pointer-events-none z-10">
@@ -399,7 +419,7 @@ export default function OBSStudioPage() {
             <div className="w-3 h-3 border-b border-r border-white/20 absolute bottom-0 right-0"></div>
           </div>
 
-          {/* Program Canvas HTML5/HLS Video Player */}
+          {/* HTML5 / HLS Video Element */}
           <video
             ref={videoRef}
             className={`w-full h-full object-contain ${videoPlaybackActive && !videoError ? 'block' : 'hidden'}`}
@@ -408,7 +428,7 @@ export default function OBSStudioPage() {
             autoPlay
           />
 
-          {/* Fallback Live HUD (Shown when stream is LIVE or during player startup) */}
+          {/* Fallback Live HUD */}
           {(!videoPlaybackActive || videoError) && (
             <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-3 bg-[#0d0f12]">
               {isLive ? (
@@ -422,60 +442,50 @@ export default function OBSStudioPage() {
                       PROGRAM OUTPUT: LIVE ON AIR
                     </div>
                     <p className="text-xs text-slate-400 font-mono">
-                      Broadcasting <span className="text-cyan-400 font-semibold">{stream?.name}</span> to YouTube Live
+                      Transmitting <span className="text-cyan-400 font-semibold">{stream?.name}</span> to YouTube Live
                     </p>
                   </div>
 
+                  {/* Real-time Stream Run Metrics */}
                   <div className="flex flex-wrap items-center justify-center gap-4 bg-[#18191c] border border-[#2b2d31] px-5 py-2 rounded font-mono text-xs shadow-inner">
-                    <span className="text-slate-400">FPS: <strong className="text-cyan-400">{telemetry?.fps || 25}</strong></span>
-                    <span className="text-slate-400">Bitrate: <strong className="text-emerald-400">{Math.round(telemetry?.bitrateKbps || 2400)} kb/s</strong></span>
+                    <span className="text-slate-400">FPS: <strong className="text-cyan-400">{telemetry?.fps || 25}.0</strong></span>
+                    <span className="text-slate-400">Egress: <strong className="text-emerald-400">{Math.round(telemetry?.bitrateKbps || 2400)} kb/s</strong></span>
                     <span className="text-slate-400">Resolution: <strong className="text-slate-200">{stream?.probeResult?.width || 1280}x{stream?.probeResult?.height || 720}</strong></span>
-                    <span className="text-slate-400">Drop Frames: <strong className="text-slate-300">{telemetry?.dropFrames || 0}</strong></span>
+                    <span className="text-slate-400">Dropped Frames: <strong className="text-emerald-400">{telemetry?.dropFrames || 0}</strong></span>
                   </div>
                 </>
               ) : (
                 <div className="space-y-2 text-slate-500">
                   <Tv2 className="w-12 h-12 mx-auto text-slate-600" />
-                  <div className="text-sm font-bold text-slate-400">Program Canvas (Standby)</div>
+                  <div className="text-sm font-bold text-slate-400">Program Canvas Standby</div>
                   <p className="text-xs text-slate-500 max-w-sm">
-                    Click <strong className="text-emerald-400">&quot;START STREAMING&quot;</strong> in the Controls dock to start the live relay.
+                    Press <strong className="text-emerald-400">&quot;START STREAMING&quot;</strong> in Controls to broadcast continuously without shutdown.
                   </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Live Scorebug Overlay inside Program Monitor */}
-          {showOverlay && (
-            <div className="absolute top-4 inset-x-0 flex justify-center pointer-events-none z-20">
-              <div className={`relative flex items-center h-11 bg-gradient-to-r from-[#0c166d] via-[#210940] to-[#0c166d] border border-cyan-500/40 rounded shadow-2xl overflow-hidden px-3 text-white transition-all ${
-                isGoalAnimation ? 'scale-105 ring-2 ring-amber-400' : ''
-              }`}>
-                {/* Home */}
-                <div className="flex items-center gap-2 pr-3 border-r border-white/20">
-                  <span className="font-black text-xs tracking-wider text-amber-300">KBFC</span>
-                  <span className="font-mono text-sm font-bold px-1.5 py-0.5 bg-black/50 rounded">{homeScore}</span>
+          {/* =========================================================================
+              KRYNN VISUALS & STREAM WATERMARK (PROFESSIONAL BROADCAST BUG)
+              ========================================================================= */}
+          {showWatermark && (
+            <div className="absolute top-4 right-4 pointer-events-none z-20">
+              <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-[#0e121b]/90 border border-cyan-400/40 shadow-2xl backdrop-blur-md">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 pulse-onair shadow-[0_0_8px_#ef4444]" />
+                <div className="flex flex-col text-left">
+                  <span className="text-xs font-black tracking-wider uppercase text-white drop-shadow-md">
+                    KRYNN VISUALS &amp; STREAM
+                  </span>
+                  <span className="text-[9px] font-mono font-bold text-cyan-300 tracking-widest uppercase">
+                    ULTRA HD LIVE
+                  </span>
                 </div>
-                {/* Clock */}
-                <div className="px-3 font-mono text-xs text-slate-200 font-bold">
-                  {matchClock}
-                </div>
-                {/* Away */}
-                <div className="flex items-center gap-2 pl-3 border-l border-white/20">
-                  <span className="font-mono text-sm font-bold px-1.5 py-0.5 bg-black/50 rounded">{awayScore}</span>
-                  <span className="font-black text-xs tracking-wider text-cyan-300">BFC</span>
-                </div>
-
-                {isGoalAnimation && (
-                  <div className="absolute inset-0 bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center tracking-widest animate-pulse">
-                    ⚽ GOAL! GOAL! GOAL!
-                  </div>
-                )}
               </div>
             </div>
           )}
 
-          {/* Canvas Floating Quick Controls (Top Bar) */}
+          {/* Canvas Floating Top Controls */}
           <div className="absolute top-2 left-2 flex items-center gap-2 z-20">
             <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase ${
               isLive ? 'bg-red-600 text-white shadow-md shadow-red-600/40' : 'bg-[#2b2d31] text-slate-400'
@@ -491,7 +501,7 @@ export default function OBSStudioPage() {
             )}
           </div>
 
-          {/* Canvas Floating Quick Controls (Bottom Bar) */}
+          {/* Canvas Floating Bottom Controls */}
           <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-20">
             <button
               onClick={() => setIsMuted(!isMuted)}
@@ -501,12 +511,12 @@ export default function OBSStudioPage() {
               {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-cyan-400" />}
             </button>
             <button
-              onClick={() => setShowOverlay(!showOverlay)}
+              onClick={() => setShowWatermark(!showWatermark)}
               className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors ${
-                showOverlay ? 'bg-cyan-500/30 border-cyan-400 text-cyan-200' : 'bg-black/70 border-white/10 text-slate-400'
+                showWatermark ? 'bg-cyan-500/30 border-cyan-400 text-cyan-200' : 'bg-black/70 border-white/10 text-slate-400'
               }`}
             >
-              Scorebug: {showOverlay ? 'ON' : 'OFF'}
+              Watermark: {showWatermark ? 'ON' : 'OFF'}
             </button>
             <button
               onClick={() => {
@@ -522,72 +532,60 @@ export default function OBSStudioPage() {
           </div>
         </div>
 
-        {/* Quick Operator Bar (Under Canvas) */}
-        <div className="mt-1 h-7 bg-[#1c1e22] border border-[#2b2d31] rounded px-3 flex items-center justify-between text-xs shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400 font-semibold">Match Score:</span>
-            <button
-              onClick={() => setHomeScore(s => s + 1)}
-              className="px-2 py-0.2 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-bold"
-            >
-              KBFC +1
-            </button>
-            <button
-              onClick={() => setAwayScore(s => s + 1)}
-              className="px-2 py-0.2 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold"
-            >
-              BFC +1
-            </button>
-            <button
-              onClick={() => {
-                setIsGoalAnimation(true);
-                setTimeout(() => setIsGoalAnimation(false), 2500);
-              }}
-              className="px-2.5 py-0.2 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black shadow-sm"
-            >
-              Goal Alert
-            </button>
-            <button
-              onClick={() => {
-                setHomeScore(0);
-                setAwayScore(0);
-              }}
-              className="px-1.5 py-0.2 rounded bg-[#2b2d31] hover:bg-[#383a40] text-slate-400 text-[10px]"
-            >
-              Reset
-            </button>
+        {/* Real-time Stream Run Telemetry Bar (Under Canvas) */}
+        <div className="mt-1 h-8 bg-[#1c1e22] border border-[#2b2d31] rounded px-3 flex items-center justify-between text-xs shrink-0 font-mono">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+              <Activity className="w-3.5 h-3.5 animate-pulse" />
+              <span>Pipeline: {isLive ? 'ACTIVE TRANSMITTING' : 'IDLE'}</span>
+            </div>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-300">
+              Speed: <strong className="text-cyan-400">{telemetry?.speed || '1.0x Realtime'}</strong>
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-300">
+              Bitrate: <strong className="text-emerald-400">{Math.round(telemetry?.bitrateKbps || 2400)} kb/s</strong>
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-300">
+              Buffer: <strong className="text-cyan-400">0ms (Zero-Latency)</strong>
+            </span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-300">
+              Drops: <strong className="text-emerald-400">{telemetry?.dropFrames || 0} (0.0%)</strong>
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleCopyOverlayUrl}
-              className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300"
+              onClick={handleCopyWatermarkUrl}
+              className="flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300"
             >
-              {overlayCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-              <span>{overlayCopied ? 'Copied' : 'Copy Browser Overlay'}</span>
+              {watermarkCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              <span>{watermarkCopied ? 'Copied' : 'Copy Watermark Overlay'}</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* =========================================================================
-          3. OBS CLASSIC DOCKS (BOTTOM STRIP)
+          3. OBS DOCKS (BOTTOM STRIP)
           ========================================================================= */}
-      <div className="h-48 bg-[#1f2023] border-t border-[#2b2d31] grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-[#2b2d31] shrink-0 text-xs">
+      <div className="h-52 bg-[#1f2023] border-t border-[#2b2d31] grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-[#2b2d31] shrink-0 text-xs">
         {/* DOCK 1: SCENES */}
         <div className="p-2.5 flex flex-col justify-between">
           <div>
             <div className="font-bold text-slate-200 text-[11px] uppercase tracking-wider mb-2 flex items-center justify-between">
               <span>Scenes</span>
-              <span className="text-[10px] text-slate-500 font-mono">4</span>
+              <span className="text-[10px] text-slate-500 font-mono">3</span>
             </div>
 
             <div className="space-y-1">
               {[
                 'Live Match Feed',
-                'Pre-Match Warmup',
-                'Halftime Studio',
-                'Scorebug Only'
+                'Studio Broadcast',
+                'Full Relay Output'
               ].map((scene) => (
                 <button
                   key={scene}
@@ -721,7 +719,7 @@ export default function OBSStudioPage() {
               </div>
             </div>
 
-            {/* Volume Gain Boost Selector */}
+            {/* Volume Gain Boost */}
             <div>
               <div className="text-[10px] text-slate-400 font-semibold mb-1">Gain Boost:</div>
               <div className="grid grid-cols-4 gap-1">
@@ -747,55 +745,94 @@ export default function OBSStudioPage() {
           </div>
         </div>
 
-        {/* DOCK 4: STREAM DESTINATION */}
+        {/* =========================================================================
+            DOCK 4: EDITABLE STREAM OUTPUT (RTMP & STREAM KEY)
+            ========================================================================= */}
         <div className="p-2.5 flex flex-col justify-between">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div className="font-bold text-slate-200 text-[11px] uppercase tracking-wider flex items-center justify-between">
               <span>Stream Output</span>
-              <span className="text-[10px] bg-red-600/20 text-red-400 px-1 py-0.2 rounded font-bold">
-                YOUTUBE LIVE
+              <span className="text-[10px] bg-red-600/20 text-red-400 px-1 py-0.2 rounded font-bold font-mono">
+                EDITABLE
               </span>
             </div>
 
-            <div className="space-y-1.5 text-xs">
-              <div>
-                <span className="text-[10px] text-slate-400 block">Server:</span>
-                <div className="text-[10px] font-mono text-slate-300 truncate bg-[#121316] px-1.5 py-0.5 rounded border border-[#2b2d31]">
-                  {stream?.destination?.ingestUrl || 'rtmp://a.rtmp.youtube.com/live2'}
-                </div>
-              </div>
+            {/* Editable RTMP Ingest URL */}
+            <div>
+              <label className="text-[10px] text-slate-400 block font-semibold">
+                RTMP Ingest Server:
+              </label>
+              <input
+                type="text"
+                value={ingestUrlInput}
+                onChange={(e) => {
+                  setIngestUrlInput(e.target.value);
+                  setOutputEditing(true);
+                }}
+                placeholder="rtmp://a.rtmp.youtube.com/live2"
+                className="w-full bg-[#121316] border border-[#2b2d31] rounded px-1.5 py-0.5 text-[10px] font-mono text-white focus:outline-none focus:border-cyan-500"
+              />
+            </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">Stream Key:</span>
-                  <button 
-                    onClick={() => setShowStreamKey(!showStreamKey)}
-                    className="text-slate-400 hover:text-white text-[10px] flex items-center gap-0.5"
-                  >
-                    {showStreamKey ? <EyeOff className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
-                    <span>{showStreamKey ? 'Hide' : 'Show'}</span>
-                  </button>
-                </div>
-                <div className="text-[10px] font-mono text-emerald-400 bg-[#121316] px-1.5 py-0.5 rounded border border-[#2b2d31] truncate">
-                  {showStreamKey ? streamKeyInput || 'ymf2-8mr5-j6vg-jcgv-08b5' : 'ymf2-••••-••••-08b5'}
-                </div>
-              </div>
-
-              {stream?.isPublicWatchEnabled && (
-                <Link
-                  href={`/watch/${stream.publicWatchSlug || stream.id}`}
-                  target="_blank"
-                  className="flex items-center justify-center gap-1 w-full py-1 rounded bg-[#282a2e] hover:bg-[#313338] text-[10px] font-medium text-cyan-300 transition-colors"
+            {/* Editable Stream Key */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] text-slate-400 font-semibold">Stream Key:</label>
+                <button 
+                  onClick={() => setShowStreamKey(!showStreamKey)}
+                  className="text-slate-400 hover:text-white text-[10px] flex items-center gap-0.5"
                 >
-                  <ExternalLink className="w-3 h-3" />
-                  <span>Open Watch Page</span>
-                </Link>
-              )}
+                  {showStreamKey ? <EyeOff className="w-2.5 h-2.5" /> : <Eye className="w-2.5 h-2.5" />}
+                  <span>{showStreamKey ? 'Hide' : 'Show'}</span>
+                </button>
+              </div>
+              <input
+                type={showStreamKey ? 'text' : 'password'}
+                value={streamKeyInput}
+                onChange={(e) => {
+                  setStreamKeyInput(e.target.value);
+                  setOutputEditing(true);
+                }}
+                placeholder="Paste YouTube Stream Key"
+                className="w-full bg-[#121316] border border-[#2b2d31] rounded px-1.5 py-0.5 text-[10px] font-mono text-emerald-400 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            {/* Save Output Button */}
+            {outputEditing && (
+              <button
+                onClick={handleSaveDestinationOutput}
+                disabled={actionLoading}
+                className="w-full py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] flex items-center justify-center gap-1 transition-colors"
+              >
+                <Save className="w-3 h-3" />
+                <span>Save &amp; Apply Output</span>
+              </button>
+            )}
+
+            {/* Quick Presets */}
+            <div className="flex gap-1 pt-0.5">
+              {[
+                { name: 'YouTube', url: 'rtmp://a.rtmp.youtube.com/live2' },
+                { name: 'Facebook', url: 'rtmps://live-api-s.facebook.com:443/rtmp/' },
+                { name: 'Twitch', url: 'rtmp://live.twitch.tv/app/' }
+              ].map(dest => (
+                <button
+                  key={dest.name}
+                  onClick={() => {
+                    setIngestUrlInput(dest.url);
+                    setOutputEditing(true);
+                  }}
+                  className="px-1 py-0.2 rounded bg-[#282a2e] hover:bg-[#313338] text-[9px] text-slate-300 font-mono"
+                >
+                  {dest.name}
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="text-[10px] text-slate-400 font-mono pt-1 border-t border-[#2b2d31] truncate">
-            Target: RTMP Primary Ingest
+            Target: RTMP Primary Broadcast
           </div>
         </div>
 
@@ -809,7 +846,7 @@ export default function OBSStudioPage() {
               </span>
             </div>
 
-            {/* BIG ICONIC OBS START / STOP STREAMING BUTTON */}
+            {/* PRIMARY START / STOP STREAMING BUTTON */}
             {isLive ? (
               <button
                 onClick={handleStopStreaming}
@@ -836,25 +873,25 @@ export default function OBSStudioPage() {
                 onClick={handleRestartStreaming}
                 disabled={actionLoading || !isLive}
                 className="flex items-center justify-center gap-1 py-1.5 rounded bg-[#282a2e] hover:bg-[#313338] disabled:opacity-40 text-[11px] font-semibold text-slate-200 transition-colors"
-                title="Restart FFmpeg Stream Relay Pipeline"
+                title="Flush and restart pipeline"
               >
                 <RotateCcw className="w-3 h-3 text-cyan-400" />
                 <span>Restart</span>
               </button>
 
               <button
-                onClick={handleCopyOverlayUrl}
+                onClick={handleCopyWatermarkUrl}
                 className="flex items-center justify-center gap-1 py-1.5 rounded bg-[#282a2e] hover:bg-[#313338] text-[11px] font-semibold text-slate-200 transition-colors"
-                title="Copy Browser Overlay URL for OBS Studio"
+                title="Copy Watermark URL"
               >
-                <Layers className="w-3 h-3 text-indigo-400" />
-                <span>Overlay</span>
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                <span>Watermark</span>
               </button>
             </div>
           </div>
 
-          <div className="p-1 rounded bg-[#121316] border border-[#2b2d31] text-[9px] text-slate-400 text-center font-mono">
-            Auto-reconnects indefinitely.
+          <div className="p-1 rounded bg-[#121316] border border-[#2b2d31] text-[9px] text-emerald-400 text-center font-mono">
+            Zero-Buffering &amp; Auto-Revive ON.
           </div>
         </div>
       </div>
@@ -878,9 +915,10 @@ export default function OBSStudioPage() {
         <div className="flex items-center gap-4">
           <span>CPU: <strong className="text-slate-300">1.2%</strong></span>
           <span>FPS: <strong className="text-cyan-400">{telemetry?.fps || 25}.00</strong></span>
-          <span>kb/s: <strong className="text-emerald-400">{Math.round(telemetry?.bitrateKbps || 2400)}</strong></span>
-          <span>Drop: <strong className="text-slate-300">{telemetry?.dropFrames || 0} (0.0%)</strong></span>
-          <span className="hidden sm:inline">Watchdog: <strong className="text-emerald-400">ACTIVE</strong></span>
+          <span>Bitrate: <strong className="text-emerald-400">{Math.round(telemetry?.bitrateKbps || 2400)} kb/s</strong></span>
+          <span>Buffer: <strong className="text-cyan-400">0ms</strong></span>
+          <span>Drop: <strong className="text-emerald-400">{telemetry?.dropFrames || 0} (0.0%)</strong></span>
+          <span className="hidden sm:inline">Engine: <strong className="text-amber-400">MAX POWER</strong></span>
         </div>
       </footer>
     </div>

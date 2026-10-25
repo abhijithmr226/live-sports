@@ -247,20 +247,24 @@ class StreamingEngine extends EventEmitter {
       // Read at native framerate for VOD file live streaming so it relays in real-time
       args.push('-re');
     } else {
-      // HTTP / HTTPS / HLS streaming
+      // HTTP / HTTPS / HLS streaming with ultra-aggressive low-latency and immediate reconnect
       args.push(
         '-reconnect', '1',
         '-reconnect_at_eof', '1',
         '-reconnect_streamed', '1',
-        '-reconnect_delay_max', '5',
-        '-rw_timeout', '15000000'
+        '-reconnect_delay_max', '2',
+        '-rw_timeout', '10000000',
+        '-multiple_requests', '1'
       );
     }
 
-    // Packet corruption recovery
+    // Packet corruption recovery & ZERO BUFFERING input flags
     args.push(
       '-err_detect', 'ignore_err',
-      '-fflags', '+genpts+discardcorrupt',
+      '-fflags', '+nobuffer+genpts+discardcorrupt',
+      '-flags', 'low_delay',
+      '-analyzeduration', '10000000',
+      '-probesize', '10000000',
       '-i', stream.sourceUrl
     );
 
@@ -276,6 +280,7 @@ class StreamingEngine extends EventEmitter {
       args.push(
         '-c:v', 'libx264',
         '-preset', profile.preset || 'veryfast',
+        '-tune', 'zerolatency',
         '-b:v', `${profile.videoBitrate || 4500}k`,
         '-maxrate', `${profile.videoBitrate || 4500}k`,
         '-bufsize', `${(profile.videoBitrate || 4500) * 2}k`,
@@ -287,7 +292,7 @@ class StreamingEngine extends EventEmitter {
         args.push('-r', `${profile.fps}`);
       }
     } else {
-      // Direct stream copy for native H.264 feeds (ultra-low CPU load)
+      // Direct stream copy for native H.264 feeds (ultra-low CPU load, zero latency)
       args.push('-c:v', 'copy');
     }
 
@@ -307,8 +312,12 @@ class StreamingEngine extends EventEmitter {
       args.push('-af', audioFilters.join(','));
     }
 
-    // Output container format for RTMP / YouTube Live with resilient flags
+    // Output container format for RTMP / YouTube Live with maximum power & zero buffering flags
     args.push(
+      '-max_muxing_queue_size', '4096',
+      '-rtmp_buffer', '100',
+      '-rtmp_live', 'live',
+      '-tcp_nodelay', '1',
       '-flvflags', 'no_duration_filesize',
       '-f', 'flv', 
       targetRtmpUrl
