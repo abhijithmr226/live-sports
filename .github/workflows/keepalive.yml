@@ -2,21 +2,27 @@ name: Render 24/7 Anti-Sleep Keepalive
 
 on:
   schedule:
-    # Trigger every 10 minutes to prevent Render free-tier from idling
+    # Trigger every 10 minutes from GitHub cloud servers to keep Render alive 24/7
     - cron: '*/10 * * * *'
-  workflow_dispatch: # Allow manual trigger from GitHub UI
+  workflow_dispatch: # Allow instant manual trigger from GitHub Actions tab
 
 jobs:
-  ping:
+  keepalive:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Render Service
+      - name: Send External HTTP Ping to Render
         run: |
-          RENDER_URL="${{ secrets.RENDER_APP_URL }}"
-          if [ -z "$RENDER_URL" ]; then
-            echo "RENDER_APP_URL secret not set. Skipping ping."
-            echo "Tip: Add your Render app URL (e.g. https://your-app.onrender.com) to GitHub Repo Secrets as RENDER_APP_URL"
-          else
-            echo "Pinging $RENDER_URL/api/health..."
-            curl -s -f -m 15 "$RENDER_URL/api/health" || echo "Ping dispatched"
-          fi
+          TARGETS=(
+            "${{ secrets.RENDER_APP_URL }}"
+            "https://live-sports-obs-studio.onrender.com"
+            "https://live-sports.onrender.com"
+          )
+
+          for URL in "${TARGETS[@]}"; do
+            if [ -n "$URL" ]; then
+              echo "Pinging $URL/api/health..."
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 20 "$URL/api/health" || echo "failed")
+              echo "Result for $URL: HTTP $HTTP_CODE"
+            fi
+          done
+          echo "Anti-sleep keepalive run completed."
