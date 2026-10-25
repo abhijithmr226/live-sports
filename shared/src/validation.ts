@@ -61,7 +61,12 @@ export const CreateStreamSchema = z.object({
   publicWatchSlug: z.string().regex(/^[a-z0-9-_]*$/, 'Slug must be alphanumeric with dashes').optional(),
 });
 
-export const UpdateStreamSchema = CreateStreamSchema.partial();
+export const UpdateStreamSchema = CreateStreamSchema.partial().extend({
+  sourceUrl: z.string().refine(
+    (val) => val === '' || /^(https?|rtmp|rtmps|rtsp|srt|udp):\/\/.+/i.test(val.trim()),
+    { message: 'Must be a valid stream URL (HTTP/HTTPS, RTMP, RTSP, SRT, or UDP) or empty' }
+  ).optional(),
+});
 
 // Validate source URL endpoint
 export const ValidateSourceSchema = z.object({

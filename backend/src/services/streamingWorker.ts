@@ -1,6 +1,8 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import os from 'os';
+import fs from 'fs';
+import path from 'path';
 import { CONFIG } from '../config';
 import { 
   getStreamById, 
@@ -163,6 +165,10 @@ class StreamingEngine extends EventEmitter {
       throw new Error(`Stream [${streamId}] not found`);
     }
 
+    if (!stream.sourceUrl || !stream.sourceUrl.trim()) {
+      throw new Error('Cannot start broadcast: Source URL is empty');
+    }
+
     const destination = getDestinationRaw(stream.destinationId);
     if (!destination) {
       throw new Error(`Destination for stream [${streamId}] not found`);
@@ -269,15 +275,41 @@ class StreamingEngine extends EventEmitter {
       '-i', stream.sourceUrl
     );
 
-    // YouTube Live compatibility: Standard FLV RTMP requires H.264 video.
-    // If input video codec is HEVC, VP9, AV1, or MPEG2, auto-transcode video so YouTube accepts it cleanly.
+    // Physical broadcast watermark badge (compact 200px bug)
+    const candidateWatermarks = [
+      path.resolve(process.cwd(), 'backend/assets/krynn_watermark.png'),
+      path.resolve(process.cwd(), 'assets/krynn_watermark.png'),
+      path.resolve(__dirname, '../../assets/krynn_watermark.png'),
+      path.resolve(__dirname, '../assets/krynn_watermark.png')
+    ];
+    const watermarkPath = candidateWatermarks.find(p => fs.existsSync(p));
+
+    if (watermarkPath) {
+      args.push('-i', watermarkPath);
+    }
+
+    // YouTube Live compatibility & Watermark filter
     const isNonH264 = Boolean(
       stream.probeResult?.videoCodec && 
       !['h264', 'avc1'].includes(stream.probeResult.videoCodec.toLowerCase())
     );
     const shouldTranscodeVideo = profile.mode === 'TRANSCODE' || (profile.autoTranscodeCompatibility !== false && isNonH264);
 
-    if (shouldTranscodeVideo) {
+    if (watermarkPath) {
+      args.push(
+        '-filter_complex', '[1:v]scale=160:-1[wm];[0:v][wm]overlay=W-w-20:20[outv]',
+        '-map', '[outv]',
+        '-map', '0:a:0?',
+        '-c:v', 'libx264',
+        '-preset', profile.preset || 'ultrafast',
+        '-tune', 'zerolatency',
+        '-b:v', `${profile.videoBitrate || 4500}k`,
+        '-maxrate', `${(profile.videoBitrate || 4500) + 500}k`,
+        '-bufsize', `${(profile.videoBitrate || 4500) * 2}k`,
+        '-pix_fmt', 'yuv420p',
+        '-g', '50'
+      );
+    } else if (shouldTranscodeVideo) {
       args.push(
         '-c:v', 'libx264',
         '-preset', profile.preset || 'veryfast',
@@ -329,12 +361,12 @@ class StreamingEngine extends EventEmitter {
       jobId: job.id,
       severity: 'INFO',
       eventType: 'JOB_STARTED',
-      message: `Starting FFmpeg relay (Mode: ${profile.mode}, Video: ${shouldTranscodeVideo ? 'Transcode' : 'Stream-Copy'}, Destination: RTMP FLV, Resiliency: Infinite Auto-Reconnect & Watchdog)`
+      message: `Starting FFmpeg relay (Watermark: ${watermarkPath ? 'Burnt-In (Krynn Visuals)' : 'None'}, Mode: ${profile.mode}, Video: ${watermarkPath || shouldTranscodeVideo ? 'Transcode' : 'Stream-Copy'}, Destination: RTMP FLV)`
     });
 
-    // Spawn FFmpeg directly without a shell
+    // Spawn FFmpeg with pipe on stdin for graceful trailer flushing
     const child = spawn(CONFIG.FFMPEG_PATH, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true
     });
 
@@ -582,14 +614,18 @@ class StreamingEngine extends EventEmitter {
 
     updateStreamStatus(streamId, 'STOPPING');
 
-    // On Windows, SIGINT cleanly tells FFmpeg to write trailer and exit
+    // Clean RTMP unpublish: send 'q\n' to FFmpeg stdin to write FLV trailer and cleanly unpublish from YouTube
     try {
-      procInfo.child.kill('SIGINT');
+      if (procInfo.child.stdin && !procInfo.child.stdin.destroyed && procInfo.child.stdin.writable) {
+        procInfo.child.stdin.write('q\n');
+      } else {
+        procInfo.child.kill('SIGINT');
+      }
     } catch {
       procInfo.child.kill();
     }
 
-    // Force kill if it hasn't exited within 3 seconds
+    // Force kill safety net if it hasn't exited within 2.5 seconds
     setTimeout(() => {
       try {
         if (!procInfo.child.killed) {
@@ -598,7 +634,7 @@ class StreamingEngine extends EventEmitter {
       } catch {
         // Ignored
       }
-    }, 3000);
+    }, 2500);
   }
 
   /**

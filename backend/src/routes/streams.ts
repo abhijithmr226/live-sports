@@ -77,7 +77,7 @@ router.get('/:id', requireAuth, (req: AuthenticatedRequest, res: Response): void
 });
 
 // Update stream
-router.patch('/:id', requireAuth, (req: AuthenticatedRequest, res: Response): void => {
+router.patch('/:id', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const result = UpdateStreamSchema.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: 'Validation failed', details: result.error.errors });
@@ -90,9 +90,11 @@ router.patch('/:id', requireAuth, (req: AuthenticatedRequest, res: Response): vo
     return;
   }
 
+  // If broadcast is LIVE or STARTING and the sourceUrl is removed or changed:
   if (existing.status === 'LIVE' || existing.status === 'STARTING') {
-    res.status(409).json({ error: 'Cannot modify core configuration while broadcast is live. Please stop the stream first.' });
-    return;
+    if (result.data.sourceUrl !== undefined && result.data.sourceUrl !== existing.sourceUrl) {
+      await streamingEngine.stopStream(existing.id, req.user!.id);
+    }
   }
 
   updateStream(req.params.id, result.data as any);

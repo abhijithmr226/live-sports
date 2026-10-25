@@ -139,7 +139,20 @@ export default function OBSStudioPage() {
   // Attach HLS player to 16:9 monitor
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !stream?.sourceUrl) return;
+    if (!video) return;
+
+    if (!stream?.sourceUrl || !stream.sourceUrl.trim()) {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      setVideoPlaybackActive(false);
+      setVideoError(false);
+      return;
+    }
 
     const isM3U8 = stream.sourceUrl.includes('.m3u8');
 
@@ -216,9 +229,15 @@ export default function OBSStudioPage() {
     setActionLoading(true);
     setError(null);
     try {
+      if (hlsRef.current) {
+        hlsRef.current.stopLoad();
+      }
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
       await api.stopStream(selectedStreamId);
       await loadStreamDetails(selectedStreamId);
-      setStatusMessage('Stream broadcast stopped.');
+      setStatusMessage('Stream broadcast stopped cleanly.');
       setTimeout(() => setStatusMessage(null), 3000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to stop stream');
@@ -247,24 +266,79 @@ export default function OBSStudioPage() {
   const isLive = stream?.status === 'LIVE' || stream?.status === 'RECONNECTING';
 
   const handleSaveSourceUrl = async () => {
-    if (!selectedStreamId || !sourceUrlInput.trim()) return;
+    if (!selectedStreamId) return;
     setActionLoading(true);
     setError(null);
+    const trimmed = sourceUrlInput.trim();
     try {
-      await api.updateStream(selectedStreamId, {
-        sourceUrl: sourceUrlInput.trim()
-      });
-      setSourceEditing(false);
-      if (isLive) {
-        setStatusMessage('Source URL updated. Restarting live broadcast with new source...');
-        await api.restartStream(selectedStreamId);
+      if (!trimmed) {
+        // Source URL removed completely
+        if (isLive) {
+          await api.stopStream(selectedStreamId);
+        }
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
+        if (videoRef.current) {
+          videoRef.current.pause();
+          videoRef.current.removeAttribute('src');
+          videoRef.current.load();
+        }
+        setVideoPlaybackActive(false);
+        setVideoError(false);
+        await api.updateStream(selectedStreamId, { sourceUrl: '' });
+        setSourceEditing(false);
+        setStatusMessage('Source URL removed. Stream stopped & monitor cleared.');
       } else {
-        setStatusMessage('Source URL applied. Ready to stream.');
+        await api.updateStream(selectedStreamId, {
+          sourceUrl: trimmed
+        });
+        setSourceEditing(false);
+        if (isLive) {
+          setStatusMessage('Source URL updated. Restarting live broadcast with new source...');
+          await api.restartStream(selectedStreamId);
+        } else {
+          setStatusMessage('Source URL applied. Ready to stream.');
+        }
       }
       await loadStreamDetails(selectedStreamId);
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update source URL');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleClearSourceUrl = async () => {
+    if (!selectedStreamId) return;
+    if (!confirm('OBS Studio: Completely remove source URL and stop stream?')) return;
+    setSourceUrlInput('');
+    setActionLoading(true);
+    setError(null);
+    try {
+      if (isLive) {
+        await api.stopStream(selectedStreamId);
+      }
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
+      }
+      setVideoPlaybackActive(false);
+      setVideoError(false);
+      await api.updateStream(selectedStreamId, { sourceUrl: '' });
+      setSourceEditing(false);
+      await loadStreamDetails(selectedStreamId);
+      setStatusMessage('Source URL removed. Stream ended.');
+      setTimeout(() => setStatusMessage(null), 3000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to remove source URL');
     } finally {
       setActionLoading(false);
     }
@@ -487,7 +561,7 @@ export default function OBSStudioPage() {
           {/* =========================================================================
               KRYNN VISUALS & STREAM WATERMARK (PROFESSIONAL BROADCAST BUG)
               ========================================================================= */}
-          {showWatermark && (
+          {showWatermark && videoPlaybackActive && !videoError && (
             <div className={`absolute pointer-events-none z-20 transition-all ${
               watermarkPos === 'top-right' ? 'top-4 right-4' : 'bottom-12 right-4'
             }`}>
@@ -667,14 +741,36 @@ export default function OBSStudioPage() {
                 className="w-full bg-[#121316] border border-[#2b2d31] rounded px-2 py-1 text-[11px] font-mono text-white focus:outline-none focus:border-cyan-500"
               />
 
-              {sourceEditing && (
-                <button
-                  onClick={handleSaveSourceUrl}
-                  disabled={actionLoading}
-                  className="mt-1 w-full py-0.5 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[10px] transition-colors"
-                >
-                  Apply Source URL
-                </button>
+              {sourceEditing ? (
+                <div className="flex gap-1 mt-1">
+                  <button
+                    onClick={handleSaveSourceUrl}
+                    disabled={actionLoading}
+                    className="flex-1 py-0.5 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[10px] transition-colors"
+                  >
+                    Apply URL
+                  </button>
+                  <button
+                    onClick={handleClearSourceUrl}
+                    disabled={actionLoading}
+                    className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-bold text-[10px] transition-colors"
+                    title="Remove URL and stop stream"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                sourceUrlInput && (
+                  <div className="flex justify-end mt-0.5">
+                    <button
+                      onClick={handleClearSourceUrl}
+                      disabled={actionLoading}
+                      className="text-[10px] text-rose-400/80 hover:text-rose-300 transition-colors"
+                    >
+                      Clear / Remove URL
+                    </button>
+                  </div>
+                )
               )}
             </div>
 
