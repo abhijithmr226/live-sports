@@ -124,6 +124,15 @@ async function startServer() {
   app.listen(CONFIG.PORT, CONFIG.HOST, () => {
     console.log(`[CloudCast Sports Studio] Backend API active on http://${CONFIG.HOST}:${CONFIG.PORT}`);
     console.log(`[CloudCast Sports Studio] Worker ID: ${CONFIG.WORKER_ID} | Max Jobs: ${CONFIG.MAX_CONCURRENT_JOBS}`);
+
+    // 4. Anti-Sleep Keepalive Heartbeat: Pings health endpoint every 10 minutes
+    // to prevent free cloud containers (e.g. Render, Koyeb) from idling into sleep mode
+    const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${CONFIG.PORT}`;
+    setInterval(() => {
+      fetch(`${selfUrl}/api/health`)
+        .then(() => console.log('[CloudCast Sports Studio] Keep-alive heartbeat dispatched'))
+        .catch(() => {});
+    }, 10 * 60 * 1000);
   });
 }
 
