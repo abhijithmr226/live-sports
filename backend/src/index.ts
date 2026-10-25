@@ -112,24 +112,30 @@ app.use((err: any, _req: Request, res: Response, _next: any) => {
   });
 });
 
-// Startup sequence
+// Startup sequence: Listen immediately so Render health check passes instantly
 async function startServer() {
-  // 1. Reconcile previous interrupted jobs
-  await streamingEngine.reconcileJobsOnStartup();
-
-  // 2. Start durable scheduler
-  durableScheduler.start();
-
-  // 3. Start autonomous dead-man revival watchdog
-  streamingEngine.startAutonomousRevivalWatchdog();
-
-  // 4. Listen on configured port
-  app.listen(CONFIG.PORT, CONFIG.HOST, () => {
+  app.listen(CONFIG.PORT, CONFIG.HOST, async () => {
     console.log(`[CloudCast Sports Studio] Backend API active on http://${CONFIG.HOST}:${CONFIG.PORT}`);
     console.log(`[CloudCast Sports Studio] Worker ID: ${CONFIG.WORKER_ID} | Max Jobs: ${CONFIG.MAX_CONCURRENT_JOBS}`);
 
+    try {
+      // 1. Reconcile previous interrupted jobs in background without blocking port
+      await streamingEngine.reconcileJobsOnStartup();
+    } catch (err) {
+      console.error('[CloudCast] Reconcile jobs warning:', err);
+    }
+
+    try {
+      // 2. Start durable scheduler
+      durableScheduler.start();
+    } catch (err) {
+      console.error('[CloudCast] Scheduler warning:', err);
+    }
+
+    // 3. Start autonomous dead-man revival watchdog
+    streamingEngine.startAutonomousRevivalWatchdog();
+
     // 4. Anti-Sleep Keepalive Heartbeat: Pings health endpoint every 10 minutes
-    // to prevent free cloud containers (e.g. Render, Koyeb) from idling into sleep mode
     const selfUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${CONFIG.PORT}`;
     setInterval(() => {
       fetch(`${selfUrl}/api/health`)

@@ -7,17 +7,17 @@ echo "=== CloudCast OBS Studio: Starting Unified Production Services on Render =
 PORT=${PORT:-3000}
 export BACKEND_URL="http://127.0.0.1:4000"
 
-# Start Backend API & FFmpeg Streaming Engine
+# Start Backend API & FFmpeg Streaming Engine on internal port 4000
 echo "Starting Backend Streaming Worker on internal port 4000..."
-PORT=4000 node backend/dist/index.js &
+(cd /app && PORT=4000 node backend/dist/index.js) &
 BACKEND_PID=$!
 
 # Brief pause for backend database initialization
 sleep 2
 
-# Start Next.js OBS Studio frontend binding to Render's $PORT
+# Start Next.js OBS Studio frontend binding to Render's public $PORT
 echo "Starting Next.js OBS Studio Interface on public port $PORT..."
-npx next start frontend -p "$PORT" &
+(cd /app/frontend && npx next start -p "$PORT") &
 FRONTEND_PID=$!
 
 # Handle shutdown signals gracefully
