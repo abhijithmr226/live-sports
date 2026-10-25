@@ -36,6 +36,7 @@ export interface RunningProcessInfo {
   uptimeSeconds: number;
   lastProgressAt: number;
   lastFpsLogged?: number;
+  lastStderrError?: string;
 }
 
 class StreamingEngine extends EventEmitter {
@@ -462,6 +463,10 @@ class StreamingEngine extends EventEmitter {
       const text = data.toString();
       procInfo.lastProgressAt = Date.now();
 
+      if (text.includes('Error') || text.includes('error') || text.includes('I/O error') || text.includes('Server returned')) {
+        procInfo.lastStderrError = text.trim();
+      }
+
       if (!connectedReported && (text.includes('Stream #') || text.includes('Output #0') || text.includes('frame='))) {
         connectedReported = true;
         addStreamLog({
@@ -559,8 +564,35 @@ class StreamingEngine extends EventEmitter {
         });
       } else {
         // UNINTENDED INTERRUPTION (source hiccup, ISP blip, or remote drop)
-        // INFINITE AUTO-RECONNECT: NEVER give up, keep trying until the user explicitly says STOP!
         const nextAttempts = procInfo.reconnectAttempts + 1;
+        const errText = procInfo.lastStderrError || '';
+
+        // If YouTube explicitly rejected the RTMP stream key on initial connect
+        const isRtmpRejected = !connectedReported && (
+          errText.includes('Error opening output') || 
+          errText.includes('I/O error') || 
+          errText.includes('NetStream.Publish.BadName')
+        );
+
+        if (isRtmpRejected && nextAttempts >= 3) {
+          const failMsg = 'YouTube rejected stream key: In YouTube Studio, the broadcast has ended or the key was reset. Please copy your active Stream Key from studio.youtube.com and update it in Stream Output.';
+          updateStreamingJob(job.id, {
+            state: 'FAILED',
+            stoppedAt: new Date().toISOString(),
+            exitCode: code || 1,
+            errorSummary: failMsg
+          });
+          updateStreamStatus(stream.id, 'FAILED', job.id);
+          addStreamLog({
+            streamId: stream.id,
+            jobId: job.id,
+            severity: 'ERROR',
+            eventType: 'JOB_FAILED',
+            message: failMsg
+          });
+          return;
+        }
+
         // Fast backoff capped at 8 seconds so recovery is near-instant
         const backoffDelay = Math.min(8000, 2000 + Math.min(nextAttempts * 1000, 6000));
 

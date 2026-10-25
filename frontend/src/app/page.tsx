@@ -475,13 +475,51 @@ export default function OBSStudioPage() {
 
       {/* Status Notifications */}
       {error && (
-        <div className="bg-rose-900/60 border-b border-rose-500/40 px-4 py-1 text-xs text-rose-200 flex items-center justify-between shrink-0">
+        <div className="bg-rose-900/60 border-b border-rose-500/40 px-4 py-1.5 text-xs text-rose-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
             <span>{error}</span>
           </div>
           <button onClick={() => setError(null)} className="text-[11px] text-rose-300 hover:underline">
             Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Broadcast Error Alert */}
+      {stream?.status === 'FAILED' && !error && (
+        <div className="bg-rose-950/80 border-b border-rose-500/50 px-4 py-2 text-xs text-rose-200 flex items-center justify-between shrink-0 shadow-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-bounce" />
+            <div>
+              <span className="font-bold text-rose-300">YouTube Stream Key Rejected: </span>
+              <span>{stream.currentJob?.errorSummary || 'In YouTube Studio, the broadcast has ended or the key was reset. Please paste your active Stream Key.'}</span>
+            </div>
+          </div>
+          <a
+            href="https://studio.youtube.com/channel/live/livestreaming"
+            target="_blank"
+            rel="noreferrer"
+            className="ml-3 shrink-0 text-[11px] bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold px-3 py-1 rounded transition-colors flex items-center gap-1 shadow"
+          >
+            <span>Open YouTube Studio</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      )}
+
+      {/* Broadcast Reconnecting Alert */}
+      {stream?.status === 'RECONNECTING' && !error && (
+        <div className="bg-amber-950/80 border-b border-amber-500/40 px-4 py-1.5 text-xs text-amber-200 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-spin" />
+            <span>Connecting stream to YouTube RTMP (Attempt #{stream.currentJob?.reconnectCount || 1})...</span>
+          </div>
+          <button
+            onClick={handleStopStreaming}
+            className="text-[10px] bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 px-2 py-0.5 rounded border border-rose-500/30 font-bold"
+          >
+            Cancel
           </button>
         </div>
       )}
